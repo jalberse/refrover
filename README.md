@@ -26,9 +26,8 @@ This project was built from [Tauri + Next.js Template](https://github.com/kvnxia
     [rustfmt](https://github.com/rust-lang/rustfmt) for Rust code
 - GitHub Actions to check code formatting and linting for both TypeScript and Rust
 
-This template uses [`pnpm`](https://pnpm.io/) as the Node.js dependency
+This project uses [`pnpm`](https://pnpm.io/) as the Node.js dependency
 manager.
-
 
 ## Getting Started
 

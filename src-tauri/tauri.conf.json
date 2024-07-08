@@ -7,7 +7,7 @@
     "distDir": "../out"
   },
   "package": {
-    "productName": "tauri-nextjs-template",
+    "productName": "vizlib",
     "version": "0.1.0"
   },
   "tauri": {
@@ -57,7 +57,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "Tauri NextJS App",
+        "title": "VizLib",
         "width": 1280,
         "height": 800
       }
