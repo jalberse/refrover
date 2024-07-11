@@ -56,6 +56,9 @@ fn db_file_exists() -> bool {
 }
 
 fn get_db_path() -> String {
-    let home_dir = home::home_dir().expect("Unable to find home directory!");
+    // TODO I think that this should work fine - I was worried that diesel setup requires
+    // knowing the location of the db, but I think once the  diesel CLI generates stuff in our source,
+    // that won't matter and we don't need to update the env variable to the user's home. Check, though.
+    let home_dir = dirs::home_dir().expect("Couldn't find home directory!");
     home_dir.to_str().unwrap().to_string() + "/.config/vizlib/sqlite.vizlib.db"
 }
