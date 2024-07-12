@@ -3,35 +3,16 @@
     windows_subsystem = "windows"
 )]
 
-use app::{models::*, schema::base_directories};
-use diesel::prelude::*;
+use app::db::query_files_with_tag;
  use app::db;
 
 #[tauri::command]
 async fn on_button_clicked() -> String {
-    // TODO Instead return a list of files that match some criteria.
-    // TODO And let's make another button that populates the db with, say, the files in some hardcoded folder (eventually, the user will be able to choose the folder).
+    let connection = &mut db::establish_db_connection();
 
-    // use app::schema::posts::dsl::*;
-    // let connection = &mut db::establish_db_connection();
-    // let results = posts
-    //     .filter(published.eq(true))
-    //     .limit(5)
-    //     .select(Post::as_select())
-    //     .load(connection)
-    //     .expect("Error loading posts");
+    let results = query_files_with_tag(2, connection);
 
-    // println!("Displaying {} posts", results.len());
-    // for post in &results {
-    //     println!("{}", post.title);
-    //     println!("-----------\n");
-    //     println!("{}", post.body);
-    // }
-
-
-    "".to_string()
-
-    // serde_json::to_string(&results).unwrap()
+    serde_json::to_string(&results).unwrap()
 }
 
 fn main() {
