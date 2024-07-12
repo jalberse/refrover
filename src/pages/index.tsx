@@ -1,29 +1,47 @@
-import { CardButton } from "@/components/CardButton"
+import { AssetTable } from "@/components/AssetTable"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
-import { invoke } from "@tauri-apps/api/tauri"
 import type { NextPage } from "next"
 import Head from "next/head"
 import Image from "next/image"
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 
 const Home: NextPage = () => {
-  const [buttonDesc, setButtonDesc] = useState<string>(
-    "Waiting to be clicked. This calls 'on_button_clicked' from Rust.",
-  )
-  const onButtonClick = () => {
-    invoke<string>("on_button_clicked")
-      .then((value) => {
-        setButtonDesc(value)
-      })
-      .catch(() => {
-        setButtonDesc("Failed to invoke Rust command 'on_button_clicked'")
-      })
-  }
+  // const [buttonDesc, setButtonDesc] = useState<string>(
+  //   "Waiting to be clicked. This calls 'on_button_clicked' from Rust.",
+  // )
+  // const onButtonClick = () => {
+  //   invoke<string>("on_button_clicked")
+  //     .then((value) => {
+  //       setButtonDesc(value)
+  //     })
+  //     .catch(() => {
+  //       setButtonDesc("Failed to invoke Rust command 'on_button_clicked'")
+  //     })
+  // }
 
   const shortcutHandler = useCallback(() => {
     console.log("Ctrl+P was pressed!")
   }, [])
   useGlobalShortcut("CommandOrControl+P", shortcutHandler)
+
+  // TODO I think we want to have query encoded in the URL search params, like
+  //   we did with the tutorial series.
+  // TODO So I think that's something like the Table component,
+  //   but we will call it something like AssetTable or something.
+  //   (we'll call files etc Assets, since that's more generic than "Reference"
+  //    which can also be confusing).
+  //    The search parameters (ie the string we've typed, for now) are passed
+  //    to the component which passes it to Rust to build the query and get the data.
+  //   We can start with pages, and later switch to infinite scroll.
+  //    But I know how to do pages, so let's start with that as I get the other
+  //    features working in an MVP.
+
+  // TODO So this page will have two components: Search and AssetTable.
+  //    Uh, do those.
+  // TODO Then AssetTable will display AssetCards via pagination.
+  //    The content of the cards will be determined by passing the query
+  //    (which is passed to the asset table, along with the page number)
+  //    to the AssetTable, which will then call the query to construct the table.
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -34,31 +52,8 @@ const Home: NextPage = () => {
       </Head>
 
       <main className="flex flex-1 flex-col items-center justify-center py-8">
-        <h1 className="m-0 text-center text-6xl">
-          Welcome to{" "}
-          <a
-            href="https://nextjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline focus:underline active:underline"
-          >
-            Next.js!
-          </a>
-        </h1>
-
-        <p className="my-12 text-center text-2xl leading-9">
-          Get started by editing{" "}
-          <code className="rounded-md bg-gray-200 p-2 font-mono text-xl">
-            src/pages/index.tsx
-          </code>
-        </p>
-
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
-          <CardButton
-            onClick={onButtonClick}
-            title="Tauri Invoke"
-            description={buttonDesc}
-          />
+          <AssetTable search_text="A" />
         </div>
       </main>
 
