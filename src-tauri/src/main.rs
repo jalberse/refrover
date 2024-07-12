@@ -3,20 +3,40 @@
     windows_subsystem = "windows"
 )]
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use app::db::query_files_with_tag;
+ use app::db;
 
 #[tauri::command]
-fn on_button_clicked() -> String {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_millis();
-    format!("on_button_clicked called from Rust! (timestamp: {since_the_epoch}ms)")
+async fn on_button_clicked() -> String {
+    let connection = &mut db::establish_db_connection();
+
+    let results = query_files_with_tag(2, connection);
+
+    serde_json::to_string(&results).unwrap()
 }
+
+// TODO Thinking from the consumer first, I think we'd want the API to be something like
+//    text input -> ranked results.
+//  The user wants to be able to just type a search and get the relevant stuff.
+//  At first, that can be a simple:
+//     decompose the search into tags with boolean operations.
+//  Later, we can use different methods - like an AI search, or
+//     that searches "fuzzy" tags generated with an AI in a separate table
+//     of speculative labels (that we can provide the UI for as "Suggested Labels")
+//     which can be promoted into the regular tag table as confirmed by a human.
+//    Those can be additional options that are next to the search bar.
+//     Other stuff (like tags highlighted in hierarchy, or another visual tag filter)
+//     could also impact the final query for fetching.
+//    We could even get really fun and have something like a color picker,
+//     and use if images include that color predominantly as part of the ranking.
 
 fn main() {
     tauri::Builder::default()
+        .setup(|_app| {
+            db::init();
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![on_button_clicked])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
