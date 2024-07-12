@@ -4,6 +4,7 @@ CREATE TABLE tags (
     name TEXT NOT NULL,
     UNIQUE(name)
 );
+CREATE INDEX tags_name_index ON tags(name);
 
 -- Table for storing the hierarchical relationships between tags
 CREATE TABLE tag_relationships (

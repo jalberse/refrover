@@ -3,36 +3,32 @@
     windows_subsystem = "windows"
 )]
 
-use app::{models::*, schema::base_directories};
-use diesel::prelude::*;
+use app::db::query_files_with_tag;
  use app::db;
 
 #[tauri::command]
 async fn on_button_clicked() -> String {
-    // TODO Instead return a list of files that match some criteria.
-    // TODO And let's make another button that populates the db with, say, the files in some hardcoded folder (eventually, the user will be able to choose the folder).
+    let connection = &mut db::establish_db_connection();
 
-    // use app::schema::posts::dsl::*;
-    // let connection = &mut db::establish_db_connection();
-    // let results = posts
-    //     .filter(published.eq(true))
-    //     .limit(5)
-    //     .select(Post::as_select())
-    //     .load(connection)
-    //     .expect("Error loading posts");
+    let results = query_files_with_tag(2, connection);
 
-    // println!("Displaying {} posts", results.len());
-    // for post in &results {
-    //     println!("{}", post.title);
-    //     println!("-----------\n");
-    //     println!("{}", post.body);
-    // }
-
-
-    "".to_string()
-
-    // serde_json::to_string(&results).unwrap()
+    serde_json::to_string(&results).unwrap()
 }
+
+// TODO Thinking from the consumer first, I think we'd want the API to be something like
+//    text input -> ranked results.
+//  The user wants to be able to just type a search and get the relevant stuff.
+//  At first, that can be a simple:
+//     decompose the search into tags with boolean operations.
+//  Later, we can use different methods - like an AI search, or
+//     that searches "fuzzy" tags generated with an AI in a separate table
+//     of speculative labels (that we can provide the UI for as "Suggested Labels")
+//     which can be promoted into the regular tag table as confirmed by a human.
+//    Those can be additional options that are next to the search bar.
+//     Other stuff (like tags highlighted in hierarchy, or another visual tag filter)
+//     could also impact the final query for fetching.
+//    We could even get really fun and have something like a color picker,
+//     and use if images include that color predominantly as part of the ranking.
 
 fn main() {
     tauri::Builder::default()

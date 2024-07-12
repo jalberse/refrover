@@ -1,4 +1,3 @@
-import { Card } from "@/components/Card"
 import { CardButton } from "@/components/CardButton"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import { invoke } from "@tauri-apps/api/tauri"
@@ -55,24 +54,6 @@ const Home: NextPage = () => {
         </p>
 
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
-          <Card
-            url="https://nextjs.org/docs"
-            title="Documentation"
-            description="Find in-depth information about Next.js features and API."
-          />
-
-          <Card
-            url="https://nextjs.org/learn"
-            title="Learn"
-            description="Learn about Next.js in an interactive course with quizzes!"
-          />
-
-          <Card
-            url="https://github.com/vercel/next.js/tree/canary/examples"
-            title="Examples"
-            description="Discover and deploy boilerplate example Next.js projects."
-          />
-
           <CardButton
             onClick={onButtonClick}
             title="Tauri Invoke"
