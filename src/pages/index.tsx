@@ -1,41 +1,26 @@
 import { AssetTable } from "@/components/AssetTable"
 import Search from "@/components/Search"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
-import type { NextPage } from "next"
 import Head from "next/head"
 import Image from "next/image"
+import { useSearchParams } from "next/navigation"
 import { useCallback } from "react"
+import { Suspense } from "react"
 
-const Home: NextPage = () => {
-  // const [buttonDesc, setButtonDesc] = useState<string>(
-  //   "Waiting to be clicked. This calls 'on_button_clicked' from Rust.",
-  // )
-  // const onButtonClick = () => {
-  //   invoke<string>("on_button_clicked")
-  //     .then((value) => {
-  //       setButtonDesc(value)
-  //     })
-  //     .catch(() => {
-  //       setButtonDesc("Failed to invoke Rust command 'on_button_clicked'")
-  //     })
-  // }
+export const Home: React.FC = () => {
+  // TODO I think there is a nicer way to do this since a Page should by
+  // optionally accept the search params, but I couldn't figure it out.
+  // That would be more type-safe, but this is fine for now.
+
+  const searchParams = useSearchParams()
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const query = searchParams.get("query") ?? ""
+  const current_page = Number(searchParams.get("page")) || 1
 
   const shortcutHandler = useCallback(() => {
     console.log("Ctrl+P was pressed!")
   }, [])
   useGlobalShortcut("CommandOrControl+P", shortcutHandler)
-
-  // TODO I think we want to have query encoded in the URL search params, like
-  //   we did with the tutorial series.
-  // TODO So I think that's something like the Table component,
-  //   but we will call it something like AssetTable or something.
-  //   (we'll call files etc Assets, since that's more generic than "Reference"
-  //    which can also be confusing).
-  //    The search parameters (ie the string we've typed, for now) are passed
-  //    to the component which passes it to Rust to build the query and get the data.
-  //   We can start with pages, and later switch to infinite scroll.
-  //    But I know how to do pages, so let's start with that as I get the other
-  //    features working in an MVP.
 
   // TODO So this page will have two components: Search and AssetTable.
   //    Uh, do those.
@@ -57,7 +42,12 @@ const Home: NextPage = () => {
           <Search placeholder="Search for reference..." />
         </div>
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
-          <AssetTable search_text="A" />
+          <Suspense
+            key={query + String(current_page)}
+            fallback={<div>Loading...</div>}
+          >
+            <AssetTable search_text={query} current_page={current_page} />
+          </Suspense>
         </div>
       </main>
 
