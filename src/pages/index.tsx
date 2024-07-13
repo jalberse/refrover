@@ -1,4 +1,5 @@
 import { AssetTable } from "@/components/AssetTable"
+import Search from "@/components/Search"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import type { NextPage } from "next"
 import Head from "next/head"
@@ -52,6 +53,9 @@ const Home: NextPage = () => {
       </Head>
 
       <main className="flex flex-1 flex-col items-center justify-center py-8">
+        <div className="flex max-w-3xl flex-wrap items-center justify-center">
+          <Search placeholder="Search for reference..." />
+        </div>
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
           <AssetTable search_text="A" />
         </div>
