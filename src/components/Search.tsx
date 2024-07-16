@@ -31,7 +31,6 @@ export default function Search({ placeholder }: { placeholder: string }) {
     // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     console.log(`Searching... ${term}`)
     const params = new URLSearchParams(searchParams)
-    params.set("page", "1")
     if (term) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       params.set("query", term)

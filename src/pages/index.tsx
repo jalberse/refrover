@@ -15,7 +15,6 @@ export const Home: React.FC = () => {
   const searchParams = useSearchParams()
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const query = searchParams.get("query") ?? ""
-  const current_page = Number(searchParams.get("page")) || 1
 
   const shortcutHandler = useCallback(() => {
     console.log("Ctrl+P was pressed!")
@@ -42,11 +41,8 @@ export const Home: React.FC = () => {
           <Search placeholder="Search for reference..." />
         </div>
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
-          <Suspense
-            key={query + String(current_page)}
-            fallback={<div>Loading...</div>}
-          >
-            <AssetTable search_text={query} current_page={current_page} />
+          <Suspense key={query} fallback={<div>Loading...</div>}>
+            <AssetTable search_text={query} />
           </Suspense>
         </div>
       </main>
