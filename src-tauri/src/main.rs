@@ -3,8 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use app::db::query_files_with_tag;
- use app::db;
+use app::{db, queries::query_files_with_tag};
 
 #[tauri::command]
 async fn on_button_clicked() -> String {
