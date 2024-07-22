@@ -8,7 +8,7 @@ use crate::schema::base_directories;
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct BaseDirectories {
-    pub id: i32,
+    pub id: String,
     pub path: String,
 }
 
@@ -18,6 +18,7 @@ pub struct BaseDirectories {
 #[derive(Insertable)]
 #[diesel(table_name = base_directories)]
 pub struct NewBaseDirectory<'a> {
+    pub id: &'a str,
     pub path: &'a str,
 }
 
@@ -26,15 +27,15 @@ pub struct NewBaseDirectory<'a> {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct FileTags {
-    pub file_id: i32,
-    pub tag_id: i32,
+    pub file_id: String,
+    pub tag_id: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::file_tags)]
-pub struct NewFileTag {
-    pub file_id: i32,
-    pub tag_id: i32,
+pub struct NewFileTag<'a> {
+    pub file_id: &'a str,
+    pub tag_id: &'a str,
 }
 
 #[derive(Queryable, Selectable)]
@@ -42,32 +43,46 @@ pub struct NewFileTag {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct Files {
-    pub id: i32,
-    pub base_directory_id: i32,
+    pub id: String,
+    pub base_directory_id: String,
     pub relative_path: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::files)]
 pub struct NewFile<'a> {
-    pub base_directory_id: i32,
+    pub id: &'a str,
+    pub base_directory_id: &'a str,
     pub relative_path: &'a str,
 }
 
+// TODO These don't match the new schema. Check this and all the other ones. They need the other new fields.
 #[derive(Queryable, Selectable)]
-#[diesel(table_name = crate::schema::tag_relationships)]
+#[diesel(table_name = crate::schema::tag_edges)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
-pub struct TagRelationships {
-    pub parent_tag_id: i32,
-    pub child_tag_id: i32,
+pub struct TagEdges {
+    pub id: String,
+    pub entry_edge_id: String,
+    pub direct_edge_id: String,
+    pub exit_edge_id: String,
+    pub start_vertex_id: String,
+    pub end_vertex_id: String,
+    pub hops: i32,
+    pub source_id: String,
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = crate::schema::tag_relationships)]
-pub struct NewTagRelationship {
-    pub parent_tag_id: i32,
-    pub child_tag_id: i32,
+#[diesel(table_name = crate::schema::tag_edges)]
+pub struct NewTagEdge<'a> {
+    pub id: &'a str,
+    pub entry_edge_id: &'a str,
+    pub direct_edge_id: &'a str,
+    pub exit_edge_id: &'a str,
+    pub start_vertex_id: &'a str,
+    pub end_vertex_id: &'a str,
+    pub hops: i32,
+    pub source_id: &'a str,
 }
 
 #[derive(Queryable, Selectable)]
@@ -75,12 +90,13 @@ pub struct NewTagRelationship {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct Tags {
-    pub id: i32,
+    pub id: String,
     pub name: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::tags)]
 pub struct NewTag<'a> {
+    pub id: &'a str,
     pub name: &'a str,
 }

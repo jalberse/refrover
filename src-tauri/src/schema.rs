@@ -2,36 +2,42 @@
 
 diesel::table! {
     base_directories (id) {
-        id -> Integer,
+        id -> Text,
         path -> Text,
     }
 }
 
 diesel::table! {
     file_tags (file_id, tag_id) {
-        file_id -> Integer,
-        tag_id -> Integer,
+        file_id -> Text,
+        tag_id -> Text,
     }
 }
 
 diesel::table! {
     files (id) {
-        id -> Integer,
-        base_directory_id -> Integer,
+        id -> Text,
+        base_directory_id -> Text,
         relative_path -> Text,
     }
 }
 
 diesel::table! {
-    tag_relationships (parent_tag_id, child_tag_id) {
-        parent_tag_id -> Integer,
-        child_tag_id -> Integer,
+    tag_edges (id) {
+        id -> Text,
+        entry_edge_id -> Text,
+        direct_edge_id -> Text,
+        exit_edge_id -> Text,
+        start_vertex_id -> Text,
+        end_vertex_id -> Text,
+        hops -> Integer,
+        source_id -> Text,
     }
 }
 
 diesel::table! {
     tags (id) {
-        id -> Integer,
+        id -> Text,
         name -> Text,
     }
 }
@@ -44,6 +50,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     base_directories,
     file_tags,
     files,
-    tag_relationships,
+    tag_edges,
     tags,
 );

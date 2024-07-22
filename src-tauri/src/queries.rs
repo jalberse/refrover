@@ -4,20 +4,227 @@
 
 use std::path::PathBuf;
 
+use diesel::dsl::{exists, select};
+use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
+use uuid::Uuid;
+
+use crate::models::NewTagEdge;
+
+
+pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection)
+{
+   // See https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
+   use crate::schema::tag_edges;
+
+   let transaction_result = connection.transaction(|connection| -> Result<(), diesel::result::Error> {
+      // Check if the edge already exists and is a direct edge
+      let edge_exists = select(exists(tag_edges::table
+         .filter(tag_edges::start_vertex_id.eq(start_vertex_id.to_string()))
+         .filter(tag_edges::end_vertex_id.eq(end_vertex_id.to_string()))
+         .filter(tag_edges::hops.eq(0)))).get_result(connection).expect("Error determining if edge exists");
+
+      if edge_exists {
+         // TODO Do nothing
+         return Ok(());
+      }
+
+      //    INSERT INTO Edge (
+      //       StartVertex,
+      //       EndVertex,
+      //       Hops,
+      //       Source)
+      //    VALUES (
+      //       @StartVertexId,
+      //       @EndVertexId,
+      //       0,
+      //       @Source)
+      //
+      // SELECT @Id = SCOPE_IDENTITY()
+      // UPDATE Edge
+      //    SET EntryEdgeId = @Id
+      //      , ExitEdgeId = @Id
+      //      , DirectEdgeId = @Id 
+      //    WHERE Id = @Id
+
+      let new_edge_id = Uuid::new_v4();
+      let new_edge = NewTagEdge {
+         id: &new_edge_id.to_string(),
+         entry_edge_id: &new_edge_id.to_string(),
+         direct_edge_id: &new_edge_id.to_string(),
+         exit_edge_id: &new_edge_id.to_string(),
+         start_vertex_id: &start_vertex_id.to_string(),
+         end_vertex_id: &end_vertex_id.to_string(),
+         hops: 0,
+         source_id: source
+      };
+
+      diesel::insert_into(tag_edges::table)
+         .values(new_edge)
+         .execute(connection)?;
+
+
+      //    -- step 1: A's incoming edges to B
+      // INSERT INTO Edge (
+      //       EntryEdgeId,
+      //       DirectEdgeId,
+      //       ExitEdgeId,
+      //       StartVertex,
+      //       EndVertex,
+      //       Hops,
+      //       Source) 
+      //    SELECT Id
+      //       , @Id
+      //       , @Id
+      //       , StartVertex 
+      //       , @EndVertexId
+      //       , Hops + 1
+      //       , @Source
+      //    FROM Edge
+      //    WHERE EndVertex = @StartVertexId
+
+      // TODO Change our UUIDs to use some wrapper class
+      //      https://github.com/diesel-rs/diesel/issues/364
+      //      Would be binary (or I could go text) in the DB
+
+      // TODO Will the Uuid::new_v4() be a problem?
+      //      For each inserted row is a new one generated, or is it the same for all inserted rows?
+      //      The latter feels more likely, but would break uniqueness and the whole point of the id.
+      //      If it's the former, then we're good.
+      //      If it's trying to use the same ID, maybe we could create some auto-incrementing TMP table?
+      //      And then use that to insert the values into the real table with new UUIDs?
+
+      // Step 1: A's incoming edges to B
+      diesel::insert_into(tag_edges::table)
+         .values(
+            tag_edges::table.select(
+               (
+                  Uuid::new_v4().to_string().into_sql::<Text>(), // new random UUID for the new edge
+                  tag_edges::entry_edge_id,
+                  new_edge_id.to_string().into_sql::<Text>(), // the new edge ID
+                  new_edge_id.to_string().into_sql::<Text>(), // the new edge ID
+                  tag_edges::start_vertex_id,
+                  end_vertex_id.to_string().into_sql::<Text>(), // the end vertex ID
+                  tag_edges::hops + 1,
+                  source.to_string().into_sql::<Text>() // the source
+               )
+            )
+            .filter(tag_edges::end_vertex_id.eq(start_vertex_id.to_string()))
+            )
+         .execute(connection)?;
+      
+      // -- step 2: A to B's outgoing edges
+      // INSERT INTO Edge (
+      //    EntryEdgeId,
+      //    DirectEdgeId,
+      //    ExitEdgeId,
+      //    StartVertex,
+      //    EndVertex,
+      //    Hops,
+      //    Source) 
+      // SELECT @Id
+      //    , @Id
+      //    , Id
+      //    , @StartVertexId 
+      //    , EndVertex
+      //    , Hops + 1
+      //    , @Source
+      // FROM Edge
+      // WHERE StartVertex = @EndVertexId
+
+      // Step 2: A to B's outgoing edges
+      diesel::insert_into(tag_edges::table)
+            .values(
+               tag_edges::table.select(
+                  (
+                     Uuid::new_v4().to_string().into_sql::<Text>(), // new random UUID for the new edge
+                     new_edge_id.to_string().into_sql::<Text>(), // EntryEdgeId
+                     new_edge_id.to_string().into_sql::<Text>(), // DirectEdgeId
+                     tag_edges::id, // ExitEdgeId
+                     start_vertex_id.to_string().into_sql::<Text>(), // StartVertex
+                     tag_edges::end_vertex_id, // EndVertex
+                     tag_edges::hops + 1, // Hops
+                     source.to_string().into_sql::<Text>() // Source
+                  )
+               )
+               .filter(tag_edges::start_vertex_id.eq(end_vertex_id.to_string()))
+            )
+            .execute(connection)?;
+      
+
+      // -- step 3: incoming edges of A to end vertex of B's outgoing edges
+      // INSERT INTO Edge (
+      //       EntryEdgeId,
+      //       DirectEdgeId,
+      //       ExitEdgeId,
+      //       StartVertex,
+      //       EndVertex,
+      //       Hops,
+      //       Source)
+      //    SELECT A.Id
+      //       , @Id
+      //       , B.Id
+      //       , A.StartVertex 
+      //       , B.EndVertex
+      //       , A.Hops + B.Hops + 1
+      //       , @Source
+      //    FROM Edge A
+      //       CROSS JOIN Edge B
+      //    WHERE A.EndVertex = @StartVertexId
+      //      AND B.StartVertex = @EndVertexId
+
+      // Step 3: incoming edges of A to end vertex of B's outgoing edges
+      // Since diesel does not support cross joins, use raw SQL.
+      diesel::sql_query("INSERT INTO tag_edges (
+            id,
+            entry_edge_id,
+            direct_edge_id,
+            exit_edge_id,
+            start_vertex_id,
+            end_vertex_id,
+            hops,
+            source_id
+         )
+         SELECT
+            , ?
+            , A.id
+            , ?
+            , B.id
+            , A.start_vertex_id
+            , B.end_vertex_id
+            , A.hops + B.hops + 1
+            , ?
+         FROM tag_edges A
+            CROSS JOIN tag_edges B
+         WHERE A.end_vertex_id = ?
+            AND B.start_vertex_id = ?")
+         .bind::<Text, _>(Uuid::new_v4().to_string())
+         .bind::<Text, _>(new_edge_id.to_string())
+         .bind::<Text, _>(source)
+         .bind::<Text, _>(start_vertex_id.to_string())
+         .bind::<Text, _>(end_vertex_id.to_string())
+         .execute(connection)?;
+
+      Ok(())
+   });
+
+   transaction_result.expect("Error adding tag edge");
+}
+
+// TODO Delete tag_edge function. Also complex. Other queries are simpler.
 
 // Function to query for all files with a given tgag, including parent tags
-pub fn query_files_with_tag(tag_id: i32, connection: &mut SqliteConnection) -> Vec<String>
+pub fn query_files_with_tag(tag_id: Uuid, connection: &mut SqliteConnection) -> Vec<String>
 {
     use crate::schema::{file_tags, files, base_directories};
 
-    let tag_ids = find_containing_tags(tag_id, connection);
+    let tag_ids = find_containing_tags(tag_id, connection).into_iter().map(|tag_id| tag_id.to_string()).collect::<Vec<String>>();
 
     let file_ids = file_tags::table
         .filter(file_tags::tag_id.eq_any(tag_ids))
         .select(file_tags::file_id)
-        .load::<i32>(connection)
+        .load::<String>(connection)
         .expect("Error loading file IDs");
 
     let files: Vec<(String, String)> = files::table
@@ -39,29 +246,9 @@ pub fn query_files_with_tag(tag_id: i32, connection: &mut SqliteConnection) -> V
     files
 }
 
-// Returns tag_id and its parents, recursively.
-pub fn find_containing_tags(tag_id: i32, connection: &mut SqliteConnection) -> Vec<i32>
+// Returns tag_id and its parents
+pub fn find_containing_tags(tag_id: Uuid, connection: &mut SqliteConnection) -> Vec<Uuid>
 {
-    use crate::schema::tag_relationships::dsl::*;
-
-    let mut parent_tags = vec![tag_id];
-    let mut current_tag_id = Some(tag_id);
-
-    while let Some(tag) = current_tag_id {
-        let parent_tag = tag_relationships
-            .filter(child_tag_id.eq(tag))
-            .select(parent_tag_id)
-            .first::<i32>(connection)
-            .optional()
-            .expect("Error finding parent tag");
-
-        if let Some(parent_tag) = parent_tag {
-            parent_tags.push(parent_tag);
-            current_tag_id = Some(parent_tag);
-        } else {
-            current_tag_id = None;
-        }
-    }
-
-    parent_tags
+    // TODO this is simple now with DAG, do it.
+    todo!()
 }

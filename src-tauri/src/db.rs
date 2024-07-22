@@ -7,9 +7,12 @@ use std::path::Path;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use serde_json::de;
+use uuid::Uuid;
 
-use crate::models::{NewBaseDirectory, NewFile};
+use crate::models::{NewBaseDirectory, NewFile, NewFileTag};
 use crate::db;
+use crate::queries::add_tag_edge;
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -74,38 +77,45 @@ fn get_db_path() -> String {
 
 fn populate_db_dummy_data()
 {
-    use crate::schema::{base_directories, file_tags, files, tag_relationships, tags};
+    use crate::schema::{base_directories, file_tags, files, tags};
 
     let base_dir = "D:\\vizlib_photos";
     let connection = &mut db::establish_db_connection();
 
+    // TODO - This would be initialized somewhere else. Probably populated when the db file is first created.
+    let source_id = Uuid::new_v4();
+
+    // TODO Instead of anonymous tuples, use the NewTag type. It exists, use it!
+
     // Set up tags
+    let a_id = Uuid::new_v4();
     let (tag_a_id, _) = diesel::insert_into(tags::table)
-        .values(tags::name.eq("a"))
-        .get_result::<(i32, String)>(connection)
+        .values((tags::id.eq(a_id.to_string()), tags::name.eq("a")))
+        .get_result::<(String, String)>(connection)
         .expect("error inserting tag A");
+    debug_assert!(tag_a_id == a_id.to_string());
 
+    let b_id = Uuid::new_v4();
     let (tag_b_id, _) = diesel::insert_into(tags::table)
-        .values(tags::name.eq("b"))
-        .get_result::<(i32, String)>(connection)
+        .values((tags::id.eq(b_id.to_string()), tags::name.eq("b")))
+        .get_result::<(String, String)>(connection)
         .expect("error inserting tag B");
+    debug_assert!(tag_b_id == b_id.to_string());
 
-    diesel::insert_into(tag_relationships::table)
-        .values((
-            tag_relationships::parent_tag_id.eq(tag_a_id),
-            tag_relationships::child_tag_id.eq(tag_b_id)
-        ))
-        .execute(connection)
-        .expect("error inserting tag relationship");
+    // TODO We're testing this call.
+    //       We probably want to test it with a larger DAG, since I'm worried about multiple path updates getting unique UUIDs.
+    add_tag_edge(a_id, b_id, &source_id.to_string(), connection);
 
+    let base_dir_id = Uuid::new_v4();
     let new_base_dir = NewBaseDirectory {
+        id: &base_dir_id.to_string(),
         path: base_dir
     };
 
     // Insert the base directory
-    let (base_dir_id, _) = diesel::insert_into(base_directories::table)
+    diesel::insert_into(base_directories::table)
         .values(new_base_dir)
-        .get_result::<(i32, String)>(connection)
+        .get_result::<(String, String)>(connection)
         .expect("Error inserting base dir");
         
         
@@ -115,6 +125,10 @@ fn populate_db_dummy_data()
     //    subdirectories. Instead, our UI will select all the subdirectories
     //    (handling that recursion for us) and then we just pass that set of
     //    directories all as their own base directories.
+    // We also want to create an option to create a tag with the name of the base directory.
+    //   So if you're importing an existing structure (like my current one) you can create the tags and relationships automatically.
+    //    If it's a nested import, that involves adding the edges too.
+    //    In UX they'd get to look at the tree of dirs and select which to import.
 
     let paths = fs::read_dir(base_dir).unwrap()
         .map(|entry| entry.unwrap().path())
@@ -127,25 +141,29 @@ fn populate_db_dummy_data()
     {
         let relative_path = path.strip_prefix(base_dir).unwrap().to_str().unwrap();
 
+        let new_file_id = Uuid::new_v4();
         let new_file = NewFile {
-            base_directory_id: base_dir_id,
+            id: &new_file_id.to_string(),
+            base_directory_id: &base_dir_id.to_string(),
             relative_path
         };
 
-        let file_id = diesel::insert_into(files::table)
+        diesel::insert_into(files::table)
             .values(new_file)
             .returning(files::id)
-            .get_result::<i32>(connection)
+            .execute(connection)
             .expect("Error inserting file");
+
+        let new_file_tag = NewFileTag {
+            file_id: &new_file_id.to_string(),
+            tag_id: &tag_a_id
+        };
 
         // This half gets the "A" tag
         diesel::insert_into(file_tags::table)
-            .values((
-                file_tags::file_id.eq(file_id),
-                file_tags::tag_id.eq(tag_a_id)
-            ))
+            .values(new_file_tag)
             .execute(connection)
-            .expect("error inserting file tag A");
+            .expect("error inserting file relationship with tag A");
     }
 
     // Do the same for the other half, for tag "B"
@@ -153,24 +171,27 @@ fn populate_db_dummy_data()
     {
         let relative_path = path.strip_prefix(base_dir).unwrap().to_str().unwrap();
 
+        let new_file_id = Uuid::new_v4();
         let new_file = NewFile {
-            base_directory_id: base_dir_id,
+            id: &new_file_id.to_string(),
+            base_directory_id: &base_dir_id.to_string(),
             relative_path
         };
 
-        let file_id = diesel::insert_into(files::table)
+        diesel::insert_into(files::table)
             .values(new_file)
-            .returning(files::id)
-            .get_result::<i32>(connection)
+            .execute(connection)
             .expect("Error inserting file");
 
         // This half gets the "B" tag
+        let new_file_tag = NewFileTag {
+            file_id: &new_file_id.to_string(),
+            tag_id: &tag_b_id
+        };
+
         diesel::insert_into(file_tags::table)
-            .values((
-                file_tags::file_id.eq(file_id),
-                file_tags::tag_id.eq(tag_b_id)
-            ))
+            .values(new_file_tag)
             .execute(connection)
-            .expect("error inserting file tag B");
+            .expect("error inserting file relationship with tag B");
     }
 }

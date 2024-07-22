@@ -23,6 +23,14 @@ diesel_migrations = "2.1.0"
 libsqlite3-sys = { version = "0.25.2", features = ["bundled"] }
 dirs = "5.0.1"
 
+[dependencies.uuid]
+version = "1.10.0"
+features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]
+
 [features]
 # by default Tauri runs in production mode
 # when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL
