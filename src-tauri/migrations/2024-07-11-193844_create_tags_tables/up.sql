@@ -27,9 +27,9 @@ create TABLE tag_edges (
     -- CAUTION: You need to make sure that the IDs of vertices from different sources never clash; the best is probably use of UUIDs
     source_id VARCHAR(36) NOT NULL,
     PRIMARY KEY (id),
-    FOREIGN KEY (entry_edge_id) REFERENCES edges(id),
-    FOREIGN KEY (direct_edge_id) REFERENCES edges(id),
-    FOREIGN KEY (exit_edge_id) REFERENCES edges(id),
+    FOREIGN KEY (entry_edge_id) REFERENCES tag_edges(id),
+    FOREIGN KEY (direct_edge_id) REFERENCES tag_edges(id),
+    FOREIGN KEY (exit_edge_id) REFERENCES tag_edges(id),
     FOREIGN KEY (start_vertex_id) REFERENCES tags(id),
     FOREIGN KEY (end_vertex_id) REFERENCES tags(id),
     UNIQUE(start_vertex_id, end_vertex_id, source_id)

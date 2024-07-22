@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 
 
 use diesel::prelude::*;
@@ -10,7 +11,7 @@ use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use serde_json::de;
 use uuid::Uuid;
 
-use crate::models::{NewBaseDirectory, NewFile, NewFileTag};
+use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewTag};
 use crate::db;
 use crate::queries::add_tag_edge;
 
@@ -85,25 +86,25 @@ fn populate_db_dummy_data()
     // TODO - This would be initialized somewhere else. Probably populated when the db file is first created.
     let source_id = Uuid::new_v4();
 
-    // TODO Instead of anonymous tuples, use the NewTag type. It exists, use it!
-
     // Set up tags
     let a_id = Uuid::new_v4();
-    let (tag_a_id, _) = diesel::insert_into(tags::table)
-        .values((tags::id.eq(a_id.to_string()), tags::name.eq("a")))
-        .get_result::<(String, String)>(connection)
-        .expect("error inserting tag A");
-    debug_assert!(tag_a_id == a_id.to_string());
-
+    let a_id_str = a_id.to_string();
     let b_id = Uuid::new_v4();
-    let (tag_b_id, _) = diesel::insert_into(tags::table)
-        .values((tags::id.eq(b_id.to_string()), tags::name.eq("b")))
-        .get_result::<(String, String)>(connection)
-        .expect("error inserting tag B");
-    debug_assert!(tag_b_id == b_id.to_string());
+    let b_id_str = b_id.to_string();
+    let new_tags = vec![
+        NewTag { id: &a_id_str, name: "a" },
+        NewTag { id: &b_id_str, name: "b" },
+    ];
 
-    // TODO We're testing this call.
-    //       We probably want to test it with a larger DAG, since I'm worried about multiple path updates getting unique UUIDs.
+    diesel::insert_into(tags::table)
+        .values(&new_tags)
+        .execute(connection)
+        .expect("Error inserting tags");
+
+    // TODO Test and build a larger network of tags, like the figure example from the article.
+    //      Notably I am interested in unique IDs for batch inserts - I think we fail and want to test.
+    //      A tmp table with autoincrementing IDs that is later inserted with unique IDs might work... idk.  
+
     add_tag_edge(a_id, b_id, &source_id.to_string(), connection);
 
     let base_dir_id = Uuid::new_v4();
@@ -156,7 +157,7 @@ fn populate_db_dummy_data()
 
         let new_file_tag = NewFileTag {
             file_id: &new_file_id.to_string(),
-            tag_id: &tag_a_id
+            tag_id: &a_id.to_string(),
         };
 
         // This half gets the "A" tag
@@ -186,7 +187,7 @@ fn populate_db_dummy_data()
         // This half gets the "B" tag
         let new_file_tag = NewFileTag {
             file_id: &new_file_id.to_string(),
-            tag_id: &tag_b_id
+            tag_id: &b_id.to_string(),
         };
 
         diesel::insert_into(file_tags::table)

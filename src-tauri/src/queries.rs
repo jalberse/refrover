@@ -18,8 +18,8 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
    // See https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
    use crate::schema::tag_edges;
 
-   let transaction_result = connection.transaction(|connection| -> Result<(), diesel::result::Error> {
-      // Check if the edge already exists and is a direct edge
+   // TODO Wrap in transaction again
+
       let edge_exists = select(exists(tag_edges::table
          .filter(tag_edges::start_vertex_id.eq(start_vertex_id.to_string()))
          .filter(tag_edges::end_vertex_id.eq(end_vertex_id.to_string()))
@@ -27,7 +27,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
 
       if edge_exists {
          // TODO Do nothing
-         return Ok(());
+         return;
       }
 
       //    INSERT INTO Edge (
@@ -62,7 +62,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
 
       diesel::insert_into(tag_edges::table)
          .values(new_edge)
-         .execute(connection)?;
+         .execute(connection).expect("Error inserting new edge!!!");
 
 
       //    -- step 1: A's incoming edges to B
@@ -84,6 +84,9 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //    FROM Edge
       //    WHERE EndVertex = @StartVertexId
 
+      // TODO Cool, this ostensibly works. Let's build a more complex network (eg one from a figure in the article) and test that it works for e.g.
+      //         inserting multiple UUIDs at a time, which I unfortunately don't think it will.
+
       // TODO Change our UUIDs to use some wrapper class
       //      https://github.com/diesel-rs/diesel/issues/364
       //      Would be binary (or I could go text) in the DB
@@ -94,6 +97,15 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //      If it's the former, then we're good.
       //      If it's trying to use the same ID, maybe we could create some auto-incrementing TMP table?
       //      And then use that to insert the values into the real table with new UUIDs?
+      //   Hmm, if it is a problem, maybe I can go back to using an AUTOINCREMENT Integer field.
+      //      If we do that, then all of this insertion etc is fine to do.
+      //      UUIDs only become really important once we're sharing between users.
+      //      And I suppose that at whatever point we interact between two DBs, we can have
+      //         an intermediate layer that translates the IDs.
+      //         e.g. we'd merge a DB in, which would in the process generate new UUIDs for all the IDs.
+
+      // TODO May want to do select before the insert statement and use into_columns, as
+      //    the insert_into() docs do. This ~works~ but might not be as clean?
 
       // Step 1: A's incoming edges to B
       diesel::insert_into(tag_edges::table)
@@ -112,7 +124,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
             )
             .filter(tag_edges::end_vertex_id.eq(start_vertex_id.to_string()))
             )
-         .execute(connection)?;
+         .execute(connection).expect("Ayudame");
       
       // -- step 2: A to B's outgoing edges
       // INSERT INTO Edge (
@@ -150,7 +162,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
                )
                .filter(tag_edges::start_vertex_id.eq(end_vertex_id.to_string()))
             )
-            .execute(connection)?;
+            .execute(connection).expect("Hither!");
       
 
       // -- step 3: incoming edges of A to end vertex of B's outgoing edges
@@ -187,7 +199,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
             source_id
          )
          SELECT
-            , ?
+            ?
             , A.id
             , ?
             , B.id
@@ -204,12 +216,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
          .bind::<Text, _>(source)
          .bind::<Text, _>(start_vertex_id.to_string())
          .bind::<Text, _>(end_vertex_id.to_string())
-         .execute(connection)?;
-
-      Ok(())
-   });
-
-   transaction_result.expect("Error adding tag edge");
+         .execute(connection).expect("Thither!");
 }
 
 // TODO Delete tag_edge function. Also complex. Other queries are simpler.
