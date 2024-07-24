@@ -87,13 +87,55 @@ fn populate_db_dummy_data()
     let source_id = Uuid::new_v4();
 
     // Set up tags
-    let a_id = Uuid::new_v4();
-    let a_id_str = a_id.to_string();
-    let b_id = Uuid::new_v4();
-    let b_id_str = b_id.to_string();
+    let admins_id = Uuid::new_v4();
+    let admins_id_str = admins_id.to_string();
+    let users_id = Uuid::new_v4();
+    let users_id_str = users_id.to_string();
+    let help_desk_id = Uuid::new_v4();
+    let help_desk_id_str = help_desk_id.to_string();
+    let ali_id = Uuid::new_v4();
+    let ali_id_str = ali_id.to_string();
+    let burcu_id = Uuid::new_v4();
+    let burcu_id_str = burcu_id.to_string();
+    let managers_id = Uuid::new_v4();
+    let managers_id_str = managers_id.to_string();
+    let technicians_id = Uuid::new_v4();
+    let technicians_id_str = technicians_id.to_string();
+    let can_id = Uuid::new_v4();
+    let can_id_str = can_id.to_string();
+    let demet_id = Uuid::new_v4();
+    let demet_id_str = demet_id.to_string();
+    let engin_id = Uuid::new_v4();
+    let engin_id_str = engin_id.to_string();
+    let fuat_id = Uuid::new_v4();
+    let fuat_id_str = fuat_id.to_string();
+    let gul_id = Uuid::new_v4();
+    let gul_id_str = gul_id.to_string();
+    let hakan_id = Uuid::new_v4();
+    let hakan_id_str = hakan_id.to_string();
+    let irmak_id = Uuid::new_v4();
+    let irmak_id_str = irmak_id.to_string();
+    let abctech_id = Uuid::new_v4();
+    let abctech_id_str = abctech_id.to_string();
+    let jale_id = Uuid::new_v4();
+    let jale_id_str = jale_id.to_string();
     let new_tags = vec![
-        NewTag { id: &a_id_str, name: "a" },
-        NewTag { id: &b_id_str, name: "b" },
+        NewTag { id: &admins_id_str, name: "admins" },
+        NewTag { id: &users_id_str, name: "users" },
+        NewTag { id: &help_desk_id_str, name: "HelpDesk" },
+        NewTag { id: &ali_id_str, name: "Ali" },
+        NewTag { id: &burcu_id_str, name: "Burcu" },
+        NewTag { id: &managers_id_str, name: "Managers" },
+        NewTag { id: &technicians_id_str, name: "Technicians" },
+        NewTag { id: &can_id_str, name: "Can" },
+        NewTag { id: &demet_id_str, name: "Demet" },
+        NewTag { id: &engin_id_str, name: "Engin" },
+        NewTag { id: &fuat_id_str, name: "Fuat" },
+        NewTag { id: &gul_id_str, name: "Gul" },
+        NewTag { id: &hakan_id_str, name: "Hakan" },
+        NewTag { id: &irmak_id_str, name: "Irmak" },
+        NewTag { id: &abctech_id_str, name: "ABC Tech" },
+        NewTag { id: &jale_id_str, name: "Jale" },
     ];
 
     diesel::insert_into(tags::table)
@@ -101,11 +143,29 @@ fn populate_db_dummy_data()
         .execute(connection)
         .expect("Error inserting tags");
 
-    // TODO Test and build a larger network of tags, like the figure example from the article.
-    //      Notably I am interested in unique IDs for batch inserts - I think we fail and want to test.
-    //      A tmp table with autoincrementing IDs that is later inserted with unique IDs might work... idk.  
+    // https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
+    // Figure 5. Example of a DAG hierarchy.
+    add_tag_edge(admins_id, help_desk_id, &source_id.to_string(), connection);
+    add_tag_edge(admins_id, ali_id, &source_id.to_string(), connection);
 
-    add_tag_edge(a_id, b_id, &source_id.to_string(), connection);
+    add_tag_edge(users_id, ali_id, &source_id.to_string(), connection);
+    add_tag_edge(users_id, burcu_id, &source_id.to_string(), connection);
+    add_tag_edge(users_id, managers_id, &source_id.to_string(), connection);
+    add_tag_edge(users_id, technicians_id, &source_id.to_string(), connection);
+    add_tag_edge(users_id, can_id, &source_id.to_string(), connection);
+    add_tag_edge(users_id, engin_id, &source_id.to_string(), connection);
+
+    add_tag_edge(help_desk_id, demet_id, &source_id.to_string(), connection);
+    add_tag_edge(help_desk_id, engin_id, &source_id.to_string(), connection);
+
+    add_tag_edge(managers_id, fuat_id, &source_id.to_string(), connection);
+    add_tag_edge(managers_id, gul_id, &source_id.to_string(), connection);
+
+    add_tag_edge(technicians_id, hakan_id, &source_id.to_string(), connection);
+    add_tag_edge(technicians_id, irmak_id, &source_id.to_string(), connection);
+    add_tag_edge(technicians_id, abctech_id, &source_id.to_string(), connection);
+    
+    add_tag_edge(abctech_id, jale_id, &source_id.to_string(), connection);
 
     let base_dir_id = Uuid::new_v4();
     let new_base_dir = NewBaseDirectory {
@@ -137,7 +197,7 @@ fn populate_db_dummy_data()
 
     let half_size = paths.len() / 2;
 
-    // Insert the paths of half the files, and tag them as "A"
+    // Insert the paths of half the files, and tag them as "Admins"
     for path in &paths[..half_size]
     {
         let relative_path = path.strip_prefix(base_dir).unwrap().to_str().unwrap();
@@ -157,17 +217,17 @@ fn populate_db_dummy_data()
 
         let new_file_tag = NewFileTag {
             file_id: &new_file_id.to_string(),
-            tag_id: &a_id.to_string(),
+            tag_id: &admins_id.to_string(),
         };
 
-        // This half gets the "A" tag
+        // This half gets the "Admins" tag
         diesel::insert_into(file_tags::table)
             .values(new_file_tag)
             .execute(connection)
             .expect("error inserting file relationship with tag A");
     }
 
-    // Do the same for the other half, for tag "B"
+    // Do the same for the other half, for tag "Users"
     for path in &paths[half_size..]
     {
         let relative_path = path.strip_prefix(base_dir).unwrap().to_str().unwrap();
@@ -184,10 +244,10 @@ fn populate_db_dummy_data()
             .execute(connection)
             .expect("Error inserting file");
 
-        // This half gets the "B" tag
+        // This half gets the "Users" tag
         let new_file_tag = NewFileTag {
             file_id: &new_file_id.to_string(),
-            tag_id: &b_id.to_string(),
+            tag_id: &users_id.to_string(),
         };
 
         diesel::insert_into(file_tags::table)

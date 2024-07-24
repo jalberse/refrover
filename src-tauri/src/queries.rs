@@ -73,7 +73,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //       StartVertex,
       //       EndVertex,
       //       Hops,
-      //       Source) 
+      //       Souce) 
       //    SELECT Id
       //       , @Id
       //       , @Id
@@ -90,6 +90,15 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       // TODO Change our UUIDs to use some wrapper class
       //      https://github.com/diesel-rs/diesel/issues/364
       //      Would be binary (or I could go text) in the DB
+
+      // TODO - yup, this is a problem. We can't insert multiple UUIDs at once.
+      //    Realistically it's probably fine to do a loop and insert them one by one as needed.
+      //    I think diesel probably has mechanisms available for some kind of for each thing to mix procedural and SQL stuff.
+      //    Don't have performance brain about this, this client app is always going to be for one user on one machine and I doubt a small set of inserts will cause lag.
+      // Hmm, something like this maybe? https://github.com/benwebber/sqlite3-uuid
+      //    Could generate UUID within SQL...
+      // TODO ************************************** Eh, for now just do the inserts in a loop, it's fine.
+      //    Do a select statement (what's feeding values now), grab it, iterate rows and execute inserts. It's fine.
 
       // TODO Will the Uuid::new_v4() be a problem?
       //      For each inserted row is a new one generated, or is it the same for all inserted rows?

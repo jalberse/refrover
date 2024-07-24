@@ -5,6 +5,8 @@ CREATE TABLE tags (
 );
 CREATE INDEX tags_name_index ON tags(name);
 
+-- TODO - perhaps just "edges". We may want other tables to be in here, too...
+
 -- The tag relationship can be modelled as a directed acyclic graph.
 -- Tags can have multiple parent tags, but no cycles are allowed.
 -- We follow the model laid out in this article for representing DAGs in SQL:
