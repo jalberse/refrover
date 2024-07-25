@@ -8,6 +8,8 @@ use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
+use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
@@ -382,4 +384,115 @@ pub fn find_containing_tags(tag_id: Uuid, connection: &mut SqliteConnection) -> 
 
     // TODO this is simple now with DAG, do it. Just return for all parents, ignoring number of hops.
     todo!()
+}
+
+
+// TODO A function that gets the whole tree of tags.
+// It should return JSON that can be used to render the tree.
+// For example, in this format:
+/**
+const data = [
+	{
+		name: 'Parent',
+		children: [{
+			name: 'Child One'
+		}, {
+			name: 'Child Two'
+		}, {
+			name: 'Child Three',
+			children: [{
+				name: 'Grandchild One'
+			}, {
+				name: 'Grandchild Two'
+			}]
+		}]
+	},
+	{
+		name: 'Child Three',
+		children: [{
+			name: 'Grandchild One'
+		}, {
+			name: 'Grandchild Two'
+		}]
+	},
+	{
+		name: 'Parent',
+		children: [{
+			name: 'Child One'
+		}, {
+			name: 'Child Two'
+		}]
+	}
+];
+*/
+
+#[derive(Serialize, Deserialize)]
+struct TagTreeNode 
+{
+   name: String,
+   children: Option<Vec<TagTreeNode>>
+}
+
+pub fn get_tag_trees(connection: &mut SqliteConnection) -> String
+{
+    use crate::schema::{tags, tag_edges};
+
+   // Get all tags with no parents; i.e. all tag IDs which are not present in the end_vertex_id column of tag_edges.
+   // These are the root nodes of the trees.
+   let root_tag_ids = tags::table
+      .select(tags::id)
+      .filter(tags::id.ne_all(tag_edges::table.select(tag_edges::end_vertex_id)))
+      .load::<String>(connection)
+      .expect("Error loading root tag IDs");
+
+   let mut trees = Vec::<TagTreeNode>::new();
+
+   for root_tag_id in root_tag_ids {
+      let root_tree = get_tag_tree(Uuid::parse_str(&root_tag_id).expect("Error parsing root tag ID"), connection);
+      trees.push(TagTreeNode {
+         name: get_tag_name(Uuid::parse_str(&root_tag_id).expect("Error parsing root tag ID"), connection),
+         children: root_tree
+      });
+   }
+
+   // Convert the trees to JSON with serde
+   serde_json::to_string(&trees).expect("Error converting trees to JSON")
+}
+
+fn get_tag_tree(tag_id: Uuid, connection: &mut SqliteConnection) -> Option<Vec<TagTreeNode>>
+{
+   use crate::schema::tag_edges;
+
+   // Get all children of the tag ID
+   let children = tag_edges::table
+      .select(tag_edges::end_vertex_id)
+      .filter(tag_edges::start_vertex_id.eq(tag_id.to_string()))
+      .filter(tag_edges::hops.eq(0))
+      .load::<String>(connection)
+      .expect("Error loading children");
+
+   let mut out = Vec::<TagTreeNode>::new();
+   for child in children {
+      let child_name = get_tag_name(Uuid::parse_str(&child).expect("Error parsing child ID"), connection);
+      let child_tree = get_tag_tree(Uuid::parse_str(&child).expect("Error parsing child ID"), connection);
+      out.push(TagTreeNode {
+         name: child_name,
+         children: child_tree
+      });
+   }
+   if out.is_empty() {
+      return None;
+   }
+   Some(out)
+}
+
+pub fn get_tag_name(tag_id: Uuid, connection: &mut SqliteConnection) -> String
+{
+    use crate::schema::tags;
+
+    tags::table
+        .select(tags::name)
+        .filter(tags::id.eq(tag_id.to_string()))
+        .first(connection)
+        .expect("Error loading tag name")
 }

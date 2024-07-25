@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewTag};
 use crate::db;
-use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
+use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id, get_tag_trees};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -173,6 +173,9 @@ fn populate_db_dummy_data()
     // Delete the tag edge between technicians and abc tech.
     // This is just to show that we can delete edges.
     delete_tag_edge(tag_edge_id, connection);
+
+    let tree = get_tag_trees(connection);
+    println!("{:?}", tree);
 
     let base_dir_id = Uuid::new_v4();
     let new_base_dir = NewBaseDirectory {
