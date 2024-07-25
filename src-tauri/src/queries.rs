@@ -19,26 +19,30 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
    // See https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
    use crate::schema::tag_edges;
 
-      // TODO - Generating the UUIDs here necessitates a series of inserts rather than a batch insert from the select statements.
-      //        Could there be a better way? Generating UUIDS in SQLite? Auto-incrementing IDs?
-      //        This is likely totally fine, however, so I won't prematurely optimize.
+   // TODO - Generating the UUIDs here necessitates a series of inserts rather than a batch insert from the select statements.
+   //        Could there be a better way? Generating UUIDS in SQLite? Auto-incrementing IDs?
+   //        This is likely totally fine, however, so I won't prematurely optimize.
 
-      // TODO Wrap in transaction again
+   // TODO Change our UUIDs to use some wrapper class
+   //      https://github.com/diesel-rs/diesel/issues/364
+   //      Would be binary (or I could go text) in the DB
 
-      // TODO Change our UUIDs to use some wrapper class
-      //      https://github.com/diesel-rs/diesel/issues/364
-      //      Would be binary (or I could go text) in the DB
+   // TODO I think this is working! Verify it.
+   //      Once we do, render it:
+   //      https://github.com/jpb12/react-tree-graph/tree/master/.storybook/stories
+   //      We probably want this I guess.
 
+   let result = connection.transaction(|connection| {
       let edge_exists = select(exists(tag_edges::table
          .filter(tag_edges::start_vertex_id.eq(start_vertex_id.to_string()))
          .filter(tag_edges::end_vertex_id.eq(end_vertex_id.to_string()))
          .filter(tag_edges::hops.eq(0)))).get_result(connection).expect("Error determining if edge exists");
-
+   
       if edge_exists {
          // Do nothing
          return Ok(());
       }
-
+   
       //    INSERT INTO Edge (
       //       StartVertex,
       //       EndVertex,
@@ -56,10 +60,10 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //      , ExitEdgeId = @Id
       //      , DirectEdgeId = @Id 
       //    WHERE Id = @Id
-
+   
       // The ID of the new direct edge. Other edges will be generated from this.
       let new_edge_id = Uuid::new_v4();
-
+   
       let new_edge = NewTagEdge {
          id: &new_edge_id.to_string(),
          entry_edge_id: &new_edge_id.to_string(),
@@ -70,11 +74,11 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
          hops: 0,
          source_id: source
       };
-
+   
       diesel::insert_into(tag_edges::table)
          .values(new_edge)
          .execute(connection).expect("Error inserting new edge!!!");
-
+   
       //    -- step 1: A's incoming edges to B
       // INSERT INTO Edge (
       //       EntryEdgeId,
@@ -93,7 +97,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //       , @Source
       //    FROM Edge
       //    WHERE EndVertex = @StartVertexId
-
+   
       let a_incoming_edges_to_b: Vec<(String, String, String, String, String, i32, String)> = tag_edges::table.select(
             (
             tag_edges::entry_edge_id,
@@ -107,7 +111,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
          )
          .filter(tag_edges::end_vertex_id.eq(start_vertex_id.to_string()))
          .load::<(String, String, String, String, String, i32, String)>(connection)?;
-
+   
       // For each row in a_incoming_edges_to_b, insert it into the table, generating a unique UUID for each row.
       for (entry_edge_id, direct_edge_id, exit_edge_id, start_vertex_id, end_vertex_id, hops, source) in a_incoming_edges_to_b {
          let new_edge = NewTagEdge {
@@ -120,12 +124,12 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
             hops: hops,
             source_id: &source
          };
-
+   
          diesel::insert_into(tag_edges::table)
             .values(new_edge)
             .execute(connection).expect("Error inserting new edge!!!");
       }
-         
+            
       // -- step 2: A to B's outgoing edges
       // INSERT INTO Edge (
       //    EntryEdgeId,
@@ -144,7 +148,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //    , @Source
       // FROM Edge
       // WHERE StartVertex = @EndVertexId
-
+   
       // Step 2: A to B's outgoing edges
       let b_outgoing_edges: Vec<(String, String, String, String, String, i32, String)> = tag_edges::table.select(
             (
@@ -159,7 +163,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
          )
          .filter(tag_edges::start_vertex_id.eq(end_vertex_id.to_string()))
          .load::<(String, String, String, String, String, i32, String)>(connection)?;
-
+   
       for (entry_edge_id, direct_edge_id, exit_edge_id, start_vertex_id, end_vertex_id, hops, source) in b_outgoing_edges {
          let new_edge = NewTagEdge {
             id: &Uuid::new_v4().to_string(),
@@ -171,12 +175,12 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
             hops: hops,
             source_id: &source
          };
-
+   
          diesel::insert_into(tag_edges::table)
             .values(new_edge)
             .execute(connection).expect("Error inserting new edge!!!");
       }
-
+   
       // -- step 3: incoming edges of A to end vertex of B's outgoing edges
       // INSERT INTO Edge (
       //       EntryEdgeId,
@@ -197,18 +201,18 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //       CROSS JOIN Edge B
       //    WHERE A.EndVertex = @StartVertexId
       //      AND B.StartVertex = @EndVertexId
-
+   
       // Diesel does not support cross joins, so we use raw SQL.
       // We create a temporary table to hold the results of the cross join, and then
       // iteratively insert the results into the tag_edges table, generating UUIDs.
       diesel::sql_query("
          CREATE TEMPORARY TABLE tmp_tag_edges AS
-         (SELECT
-            A.id -- EntryEdgeId
-            , B.id -- ExitEdgeId
-            , A.start_vertex_id -- StartVertex
-            , B.end_vertex_id -- EndVertex
-            , A.hops + B.hops + 1 -- Hops
+         SELECT
+            A.id
+            , B.id
+            , A.start_vertex_id
+            , B.end_vertex_id
+            , A.hops + B.hops + 1
          FROM tag_edges A
             CROSS JOIN tag_edges B
          WHERE A.end_vertex_id = ?
@@ -216,7 +220,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
          .bind::<Text, _>(start_vertex_id.to_string())
          .bind::<Text, _>(end_vertex_id.to_string())
          .execute(connection).expect("Error creating temporary table");
-      
+         
       // Insert into the tag_edges table from the temporary table, generating UUIDs
       #[derive(QueryableByName)]
       #[table_name = "tmp_tag_edges"]
@@ -232,11 +236,11 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
           #[sql_type = "Integer"]
           hops: i32,
       }
-      
+         
       let tmp_edges: Vec<TempTagEdge> = diesel::sql_query("SELECT * FROM tmp_tag_edges")
           .load::<TempTagEdge>(connection)
           .expect("Error loading tmp edges");
-
+   
       for tmp_edge in &tmp_edges {
          let new_edge = NewTagEdge {
             id: &Uuid::new_v4().to_string(), // Generate a new UUID for each row
@@ -248,13 +252,20 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
             hops: tmp_edge.hops,
             source_id: &source
          };
-
+         
          diesel::insert_into(tag_edges::table)
             .values(new_edge)
             .execute(connection).expect("Error inserting new edge!!!");
       }
+   
+      // Drop the tmp table
+      diesel::sql_query("DROP TABLE tmp_tag_edges")
+         .execute(connection).expect("Error dropping temporary table");
 
       Ok(())
+   });
+
+   result
 }
 
 // TODO Delete tag_edge function. Also complex. Other queries are simpler.
