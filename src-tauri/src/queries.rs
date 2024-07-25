@@ -11,7 +11,7 @@ use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
-use crate::models::NewTagEdge;
+use crate::models::{NewTagEdge, RowsAffected};
 
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
@@ -27,8 +27,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
    //      https://github.com/diesel-rs/diesel/issues/364
    //      Would be binary (or I could go text) in the DB
 
-   // TODO I think this is working! Verify it.
-   //      Once we do, render it:
+   // TODO This does seem to be working. Render it, and let the user filter files by tags by selecting in the tree.
    //      https://github.com/jpb12/react-tree-graph/tree/master/.storybook/stories
    //      We probably want this I guess.
 
@@ -268,7 +267,81 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
    result
 }
 
-// TODO Delete tag_edge function. Also complex. Other queries are simpler.
+/// Deletes the given tag edge from the database.
+/// The edge must be a direct edge (hops = 0).
+pub fn delete_tag_edge(id: Uuid, connection: &mut SqliteConnection) -> diesel::QueryResult<()> {
+   let result = connection.transaction(|connection| {
+      diesel::sql_query("SELECT id FROM tag_edges WHERE id = ? AND hops = 0")
+         .bind::<Text, _>(id.to_string())
+         .execute(connection).expect("Error checking if edge exists");
+   
+      // If the edge does not exist, return an error
+      let rows_affected: RowsAffected = diesel::sql_query("SELECT changes() AS rows_affected").get_result(connection).expect("Error getting number of rows affected");
+      let rows_affected = rows_affected.rows_affected;
+      if rows_affected == 0 {
+         return Err(diesel::result::Error::NotFound);
+      }
+
+      diesel::sql_query("CREATE TEMPORARY TABLE purge_list ( Id VARCHAR(36) PRIMARY KEY )")
+         .execute(connection).expect("Error creating temporary table");
+
+      // Step 1: Rows that were originally inserted with the first AddEdge call for this direct edge
+      diesel::sql_query("INSERT INTO purge_list SELECT Id FROM tag_edges WHERE direct_edge_id = ?")
+         .bind::<Text, _>(id.to_string())
+         .execute(connection).expect("Error inserting into purge list");
+
+      // Step 2: scan and find all dependent rows that are inserted afterwards
+      loop
+      {
+         diesel::sql_query("INSERT INTO purge_list
+               SELECT id
+               FROM tag_edges
+               WHERE hops > 0
+               AND ( entry_edge_id IN ( SELECT Id FROM purge_list )
+               OR exit_edge_id IN ( SELECT Id FROM purge_list ))
+               AND Id NOT IN ( SELECT Id FROM purge_list )")
+            .execute(connection).expect("Error inserting into purge list");
+      
+         // Get the nuber of rows effected by the last insert
+         let rows_affected: RowsAffected = diesel::sql_query("SELECT changes() AS rows_affected").get_result(connection).expect("Error getting number of rows affected");
+         let rows_affected = rows_affected.rows_affected;
+         
+         if rows_affected == 0 {
+            break;
+         }
+      }
+
+      // Delete the IDs in the purge list from the edges table
+      diesel::sql_query("DELETE FROM tag_edges WHERE Id IN (SELECT Id FROM purge_list)")
+      .execute(connection).expect("Error deleting from tag_edges");
+
+      // Drop the temporary table
+      diesel::sql_query("DROP TABLE purge_list")
+      .execute(connection).expect("Error dropping temporary table");
+
+      Ok(())
+   });
+
+   result
+}
+
+/// Get the direct edge ID given a start and end vertex ID and source ID.
+/// If the edge does not exist, returns None, including if there is an indirect edge.
+pub fn get_edge_id(start_vertex_id: Uuid, end_vertex_id: Uuid, source_id: &str, connection: &mut SqliteConnection) -> Option<Uuid> {
+   use crate::schema::tag_edges;
+
+   let edge_id: Option<String> = tag_edges::table
+      .select(tag_edges::id)
+      .filter(tag_edges::start_vertex_id.eq(start_vertex_id.to_string()))
+      .filter(tag_edges::end_vertex_id.eq(end_vertex_id.to_string()))
+      .filter(tag_edges::source_id.eq(source_id))
+      .filter(tag_edges::hops.eq(0))
+      .first(connection)
+      .optional()
+      .expect("Error getting edge ID");
+
+   edge_id.map(|edge_id| Uuid::parse_str(&edge_id).expect("Error parsing edge ID"))
+}
 
 // Function to query for all files with a given tgag, including parent tags
 pub fn query_files_with_tag(tag_id: Uuid, connection: &mut SqliteConnection) -> Vec<String>
@@ -305,6 +378,8 @@ pub fn query_files_with_tag(tag_id: Uuid, connection: &mut SqliteConnection) -> 
 // Returns tag_id and its parents
 pub fn find_containing_tags(tag_id: Uuid, connection: &mut SqliteConnection) -> Vec<Uuid>
 {
-    // TODO this is simple now with DAG, do it.
+   use crate::schema::tag_edges;
+
+    // TODO this is simple now with DAG, do it. Just return for all parents, ignoring number of hops.
     todo!()
 }

@@ -37,6 +37,12 @@ create TABLE tag_edges (
     UNIQUE(start_vertex_id, end_vertex_id, source_id)
 );
 
+-- Indices for the tag_edges table
+CREATE INDEX tag_edges_start_vertex_id_index ON tag_edges(start_vertex_id);
+CREATE INDEX tag_edges_end_vertex_id_index ON tag_edges(end_vertex_id);
+CREATE INDEX tag_edges_source_id_index ON tag_edges(source_id);
+CREATE INDEX tag_edges_vertices_index ON tag_edges(start_vertex_id, end_vertex_id, source_id);
+
 -- Table for associating files with tags
 CREATE TABLE file_tags (
     file_id VARCHAR(36) NOT NULL,

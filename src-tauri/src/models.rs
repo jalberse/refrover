@@ -1,7 +1,14 @@
 use diesel::prelude::*;
+use diesel::sql_types::Integer; // Add this line
 use serde::Serialize;
 
 use crate::schema::base_directories;
+
+#[derive(QueryableByName)]
+pub struct RowsAffected {
+    #[sql_type = "Integer"]
+    pub rows_affected: i32,
+}
 
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::base_directories)]

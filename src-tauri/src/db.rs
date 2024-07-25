@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewTag};
 use crate::db;
-use crate::queries::add_tag_edge;
+use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -166,6 +166,13 @@ fn populate_db_dummy_data()
     add_tag_edge(technicians_id, abctech_id, &source_id.to_string(), connection);
     
     add_tag_edge(abctech_id, jale_id, &source_id.to_string(), connection);
+
+    // Get the tag edge ID between technicians and abc tech.
+    let tag_edge_id = get_edge_id(technicians_id, abctech_id, &source_id.to_string(), connection).expect("Error finding edge ID");
+
+    // Delete the tag edge between technicians and abc tech.
+    // This is just to show that we can delete edges.
+    delete_tag_edge(tag_edge_id, connection);
 
     let base_dir_id = Uuid::new_v4();
     let new_base_dir = NewBaseDirectory {
