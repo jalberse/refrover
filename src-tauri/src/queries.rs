@@ -8,7 +8,6 @@ use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
@@ -454,6 +453,8 @@ pub fn get_tag_trees(connection: &mut SqliteConnection) -> String
          children: root_tree
       });
    }
+
+   // TODO cool, I think this should be the correct JSON that we can use to render the tree. Go do that!
 
    // Convert the trees to JSON with serde
    serde_json::to_string(&trees).expect("Error converting trees to JSON")
