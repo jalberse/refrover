@@ -81,16 +81,28 @@ fn inference() -> Result<(), ort::Error>
     // TODO Verify this works. I think it should be fine, but it's just some random crate. 
     use instant_clip_tokenizer::{Token, Tokenizer};
     let tokenizer = Tokenizer::new();
-    let mut tokens = Vec::new();
 
-    tokenizer.encode("A cat", &mut tokens);
-    let tokens = tokens.into_iter().map(Token::to_u16).collect::<Vec<_>>();
-    // Transform the tokens to i32, which is what the model expects.
-    let mut tokens = tokens.into_iter().map(|x| x as i32).collect::<Vec<_>>();
-    // Pad to 77 tokens, the expected input size.
-    // TODO - limit UI search to 77 tokens.
-    tokens.resize(77, 0);
-    let tokens = tokens; // maintain const
+    let context_length = 77;
+
+    let input_texts = vec![
+        "a diagram",
+        "a cat",
+        "a dog",
+    ];
+    let mut all_tokens = Vec::new();
+    for text in &input_texts {
+        let mut tokens = Vec::new();
+        tokenizer.encode(text, &mut tokens);
+        let tokens = tokens.into_iter().map(Token::to_u16).collect::<Vec<_>>();
+        // Transform the tokens to i32, which is what the model expects.
+        let mut tokens = tokens.into_iter().map(|x| x as i32).collect::<Vec<_>>();
+        // TODO If we truncate the tokens here, then I think we miss the <endTex> token that the model expects. See their clip.py tokenization.
+        // Pad to 77 tokens, the expected input size per row.
+        tokens.resize(context_length, 0);
+        all_tokens.append(&mut tokens);
+    }
+    // Maintain const.
+    let all_tokens = all_tokens;
 
     // TODO Then juist figure out image stuff and then get predictions as below.
     // TODO Test the model against a sample photo, with a sample query.
@@ -103,7 +115,7 @@ fn inference() -> Result<(), ort::Error>
 
     // TODO Note I think we only need the ViT model right now.
     
-    let original_img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("baseball.jpg")).unwrap();
+    let original_img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("CLIP.png")).unwrap();
 	let (img_width, img_height) = (original_img.width(), original_img.height());
     let image_input_size = 336;
 	let img = original_img.resize_exact(image_input_size, image_input_size, FilterType::CatmullRom);
@@ -121,7 +133,12 @@ fn inference() -> Result<(), ort::Error>
     //   Unsure if I pre-processed the image correctly.
 
     // Create Arrays of the tokens and image_input
-    let tokens = Array::from_shape_vec((1, tokens.len()), tokens).unwrap();
+
+    // The model expects the following for the text token input:
+    // A two-dimensional tensor containing the resulting tokens, shape = [number of input strings, context_length
+    println!("Tokens: {:?}", all_tokens);
+    println!("Shape: {:?}", (all_tokens.len(), context_length));
+    let tokens = Array::from_shape_vec((input_texts.len(), context_length), all_tokens).unwrap();
     let image_input = image_input.into_shape((1, 3, image_input_size as usize, image_input_size as usize)).unwrap();
 
     let outputs: SessionOutputs = session.run(inputs![
@@ -133,7 +150,7 @@ fn inference() -> Result<(), ort::Error>
     let _logits_per_text = &outputs[1].try_extract_tensor::<f32>()?;
 
     // Softmax is used for "which of these is likely", but not if we just want one query (our use case)
-    // let probabilities = logits_per_image.softmax(Axis(1));
+    let probabilities = logits_per_image.softmax(Axis(1));
     
     // TODO Do the OpenAI example on Clip.PNG to see if we get the same/similar numbers.
     //   If so, yippee we've likely configured it correctly.
@@ -141,7 +158,7 @@ fn inference() -> Result<(), ort::Error>
     //   I think it's looking OK - baseball had a value twice as high as motorcycling, which is what I expected.
 
     // Convert the probabilities to a Vec
-    let probabilities = logits_per_image.iter().map(|x| x.to_owned()).collect::<Vec<_>>();
+    // let probabilities = logits_per_image.iter().map(|x| x.to_owned()).collect::<Vec<_>>();
     println!("Probs: {:?}", probabilities);
 
     Ok(())
