@@ -174,8 +174,8 @@ fn populate_db_dummy_data()
     // This is just to show that we can delete edges.
     delete_tag_edge(tag_edge_id, connection);
 
-    let tree = get_tag_trees(connection);
-    println!("{:?}", tree);
+    // let tree = get_tag_trees(connection);
+    // println!("{:?}", tree);
 
     let base_dir_id = Uuid::new_v4();
     let new_base_dir = NewBaseDirectory {

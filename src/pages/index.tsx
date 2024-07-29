@@ -1,5 +1,6 @@
 import { AssetTable } from "@/components/AssetTable"
 import Search from "@/components/Search"
+import TagHierarchy from "@/components/TagHierarchy"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import Head from "next/head"
 import Image from "next/image"
@@ -28,6 +29,8 @@ export const Home: React.FC = () => {
   //    (which is passed to the asset table, along with the page number)
   //    to the AssetTable, which will then call the query to construct the table.
 
+  // TODO Want the tag hierarchy stuff on a left panel. Do that.
+
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <Head>
@@ -39,6 +42,10 @@ export const Home: React.FC = () => {
       <main className="flex flex-1 flex-col items-center justify-center py-8">
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
           <Search placeholder="Search for reference..." />
+        </div>
+
+        <div className="flex max-w-3xl flex-wrap items-center justify-center">
+          <TagHierarchy></TagHierarchy>
         </div>
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
           <Suspense key={query} fallback={<div>Loading...</div>}>
