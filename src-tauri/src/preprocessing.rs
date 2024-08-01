@@ -10,6 +10,8 @@ pub const CONTEXT_LENGTH: usize = 77;
 // TODO This should instead load a BATCH of images.
 // See the [0, 1, y, x] eg - the 0 refers to the image index in the batch.
 
+// TODO Have an individual and batch for each of these. The individual should just call the batch with a vec of 1, they'll both return the same type.
+
 pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
 {
     let original_img = image::open(path).unwrap();
@@ -26,6 +28,11 @@ pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
 	}
 
     image_input
+}
+
+pub fn tokenize(text: &str) -> Array2<i32>
+{
+	tokenize_batch([text].to_vec())
 }
 
 pub fn tokenize_batch(text: Vec<&str>) -> Array2<i32>
