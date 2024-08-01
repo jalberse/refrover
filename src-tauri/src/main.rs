@@ -44,27 +44,17 @@ fn main() {
 }
 
 fn inference() -> Result<(), ort::Error>
-{
-    
-    //    Note we might do something like: Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("tokenizer.json")
-
-    // TODO We should initialize this once on launch, not every time we do inference.
-    // TODO The same with the tokenizer.
-    //   Possibly we'd want to use a Lazy load and keep a gloabl Arc on it.
-    let clip = Clip::new()?;
-
-    use instant_clip_tokenizer::Tokenizer;
-    let tokenizer = Tokenizer::new();
-
+{   
     let input_texts = vec![
         "a man playing the saxophone",
         "a man playing baseball",
         "cathedral",
-    ];
-    
+        ];
+        
     let all_tokens = preprocessing::tokenize_batch(input_texts);
     let image_input: Array<f32, Dim<[usize; 4]>> = preprocessing::load_image(&Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("baseball.jpg"));
-
+        
+    let clip = Clip::new()?;
     let forward_results = clip.forward(image_input, all_tokens)?;
 
     let probabilities = forward_results.logits_per_image.softmax(Axis(1));
