@@ -75,8 +75,8 @@ impl Clip
     }
 
     /// Given a batch of text tokens, returns the text features encoded by the language portion of the CLIP model.
-    /// Generate tokens from raw text using the instant_clip_tokenizer crate.
-    pub fn encode_text(&self, tokens: Array2<u16>) -> Result<Tensor<f32>, ort::Error>
+    /// Generate tokens using preprocessing::tokenize_batch().
+    pub fn encode_text(&self, tokens: Array2<i32>) -> Result<Tensor<f32>, ort::Error>
     {
         // TODO Implement this
         todo!()
@@ -86,11 +86,8 @@ impl Clip
     /// containing the logit scores corresponding to each image and text input.
     /// The values are cosine similarities between the corresponding image and text features,
     /// times 100.
-    pub fn forward(&self, images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<u16>) -> Result<ForwardResults, ort::Error>
+    pub fn forward(&self, images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<i32>) -> Result<ForwardResults, ort::Error>
     {
-        // Convert to i32
-        let tokens = tokens.mapv(|x| x as i32);
-
         // TODO For now, we will just run the forward model.
         //   But we will want to instead mimic CLIP.forward() and use the constituent models,
         //   and then just get the cosine similarity. This will save space on the disk, since

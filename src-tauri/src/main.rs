@@ -62,7 +62,7 @@ fn inference() -> Result<(), ort::Error>
         "cathedral",
     ];
     
-    let all_tokens = tokenizer.tokenize_batch(input_texts, CONTEXT_LENGTH);
+    let all_tokens = preprocessing::tokenize_batch(input_texts);
     let image_input: Array<f32, Dim<[usize; 4]>> = preprocessing::load_image(&Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("baseball.jpg"));
 
     let forward_results = clip.forward(image_input, all_tokens)?;

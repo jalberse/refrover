@@ -2,10 +2,13 @@
 
 use std::path::Path;
 use image::{imageops::FilterType, GenericImageView};
-use ndarray::{Array, Dim};
+use ndarray::{Array, Array2, Dim};
 
 pub const IMAGE_INPUT_SIZE: usize = 336;
 pub const CONTEXT_LENGTH: usize = 77;
+
+// TODO This should instead load a BATCH of images.
+// See the [0, 1, y, x] eg - the 0 refers to the image index in the batch.
 
 pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
 {
@@ -23,4 +26,16 @@ pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
 	}
 
     image_input
+}
+
+pub fn tokenize_batch(text: Vec<&str>) -> Array2<i32>
+{
+	// TODO Rather than initializing the tokenizer each time, Lazy load it.
+	let tokenizer = instant_clip_tokenizer::Tokenizer::new();
+	let tokens = tokenizer.tokenize_batch(text, CONTEXT_LENGTH);
+
+	// Convert to i32 (for ONNX)
+	let tokens = tokens.mapv(|x| x as i32);
+
+	tokens
 }
