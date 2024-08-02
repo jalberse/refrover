@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
-use ort::{self, inputs, GraphOptimizationLevel, Tensor};
+use ort::{self, inputs, GraphOptimizationLevel};
 
 use crate::preprocessing::FEATURE_VECTOR_LENGTH;
 
@@ -24,7 +24,6 @@ pub struct Clip
     visual_session: ort::Session,
     text_session: ort::Session,
     forward_session: ort::Session
-    // TODO We also need to store tensor data for the text encoding (+ forward methods once we switch off the combined model).
 }
 
 impl Clip
@@ -61,8 +60,6 @@ impl Clip
             .with_intra_threads(4)?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px.onnx"))?;
 
-        // TOOD Also load in the tensor data/params... I think we need tch for that?
-
         Ok( Clip { visual_session, text_session, forward_session } )
     }
 
@@ -98,10 +95,19 @@ impl Clip
     /// Generate tokens using preprocessing::tokenize_batch().
     /// 
     /// Returns a 2D array of shape (batch_size, FEATURE_VECTOR_LENGTH).
-    pub fn encode_text(&self, tokens: Array2<i32>) -> Result<Tensor<f32>, ort::Error>
+    pub fn encode_text(&self, tokens: Array2<i32>) -> Result<Array2<f32>, ort::Error>
     {
-        // TODO Implement this
-        todo!()
+        let tokens_len = tokens.len_of(Axis(0));
+        let outputs = self.text_session.run(inputs![tokens]?)?;
+
+        let output = &outputs["FEATURES_EMBEDDED"];
+
+        // First dimension is for each text in the batch; the second is the feature vector per text.
+        let output = output.try_extract_tensor::<f32>()?;
+
+        let output: Array2<f32> = output.to_shape((tokens_len, FEATURE_VECTOR_LENGTH)).unwrap().to_owned();
+
+        Ok(output)
     }
 
     /// Given a batch of images and a batch of text tokens, returns two Tensors,
