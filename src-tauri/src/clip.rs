@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
-use ort::{self, inputs, GraphOptimizationLevel};
+use ort::{self, inputs, CUDAExecutionProvider, GraphOptimizationLevel, TensorRTExecutionProvider};
 
 use crate::preprocessing::FEATURE_VECTOR_LENGTH;
 
@@ -45,19 +45,30 @@ impl Clip
         // TODO And ensure that the env variable for the process points to it:
         //      std::env::set_var("ORT_DYLIB_PATH", "./libonnxruntime.so");
 
+        // TODO It looks like takes some time to load these. I think we'll want separate models so we can load them individually and asynchronously?
+        //      They aren't actually that related to each other other than semantically, since they're separate ONNX graphs.
+        //      Like, waiting a bit to initialize visual aint bad because that's mostly in the background.
+        //      Text we do want to be fast + first since that's the main thing we're doing.
+        //      The combined model we'll use for something like suggested tags, but that's it.
+        //       It's advantageous to split these.
+        //   We also definitely want to initiate the session once on startup and keep it around the whole process.
+
         let visual_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
+            .with_execution_providers([TensorRTExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_visual.onnx"))?;
 
         let text_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
+            .with_execution_providers([TensorRTExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_transformer.onnx"))?;
 
         let forward_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
+            .with_execution_providers([TensorRTExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px.onnx"))?;
 
         Ok( Clip { visual_session, text_session, forward_session } )

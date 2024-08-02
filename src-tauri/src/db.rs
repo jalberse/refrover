@@ -1,16 +1,17 @@
 /// Logic related to database logistics; creating the database file, running migrations, etc.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use ndarray::Array2;
 use uuid::Uuid;
 
-use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewTag};
-use crate::db;
+use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewImageFeaturesVitL14336Px, NewTag};
+use crate::{clip, db, preprocessing, schema};
 use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
@@ -24,9 +25,10 @@ pub fn init() {
     
     run_migrations();
     
-    // TODO Remove this eventually, it's just for testing
+    // TODO Remove this eventually, it's just for testing. We will eventually be populating the DB via the UI and calling into more specific functions.
     if !db_exists {
-        populate_db_dummy_data();
+        populate_db_dummy_data_tags();
+        populate_image_features();
     }
 }
 
@@ -78,7 +80,13 @@ fn get_db_path() -> String {
     home_dir.to_str().unwrap().to_string() + "/.config/vizlib/sqlite.vizlib.db"
 }
 
-fn populate_db_dummy_data()
+// TODO Get image features of data in D:\vizlib_photos, add them to the DB.
+//   No need for tags right now.
+//   The BLOB should be the serialized (using serde) version of the feature vector.
+//   I was thinking of serializing a wrapper around the feature vector that has
+//   some versioning, though? But if we truly have two different feature spaces, they
+
+fn populate_db_dummy_data_tags()
 {
     use crate::schema::{base_directories, file_tags, files, tags};
 
@@ -267,4 +275,66 @@ fn populate_db_dummy_data()
             .execute(connection)
             .expect("error inserting file relationship with tag B");
     }
+}
+
+// To be called after populate_dummy_data
+// TODO This isn't a final function, I am hacking a test together,
+//   but snippets of it will probably be useful.
+//   For example, this totally hangs (could be IO, and we need to ensure we use a CUDA provider not CPU for our runtime)
+//   But in any case, we'd want it to be some asynch task that's going and updating our KNN and table in the background
+//   while users are allowing to continue using the app while that search information is updated for later.
+//  TODO (Also check the system resources while we're doing this to see if we're hitting the GPU and IO stuff)
+fn populate_image_features()
+{
+    // Query for all of the filepaths by joining the base_directories and files tables.
+
+    use schema::image_features_vit_l_14_336_px::dsl::*;
+    use schema::files::dsl::*;
+    use schema::base_directories::dsl::*;
+
+    // Load our CLIP model.
+    let clip = clip::Clip::new().unwrap();
+
+    let connection = &mut db::establish_db_connection();
+
+    let all_files: Vec<(String, String, String)> = base_directories.inner_join(files)
+        .select((schema::files::dsl::id, path, relative_path))
+        .load::<(String, String, String)>(connection).unwrap();
+
+    all_files.chunks(64).for_each(|chunk| {
+        // Get a vec of pathbufs to images
+        let paths: Vec<PathBuf> = chunk.iter().map(|(_, base, rel) | -> PathBuf {
+            PathBuf::from(Path::new(&base).join(rel))
+        }).collect();
+
+        // Load and preprocess our images
+        let images = preprocessing::load_image_batch(&paths);
+
+        // Get image encodings
+        let image_encodings: Array2<f32> = clip.encode_image(images).unwrap();
+
+        // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
+        let serialized_encodings: Vec<Vec<u8>> = image_encodings.outer_iter().map(|row| {
+            bincode::serialize(&row.to_vec()).unwrap()
+        }).collect();
+
+        // Insert the image encodings into the image_features_vit_l_14_336_px table
+        // The encoding is serialized with serde.
+        // The ID of the encoding is the same as the file ID.
+        let new_image_features: Vec<NewImageFeaturesVitL14336Px> = chunk.iter().zip(serialized_encodings.iter()).map(|((file_id, _, _), encoding)| {
+            NewImageFeaturesVitL14336Px {
+                id: file_id,
+                feature_vector: encoding
+            }
+        }).collect();
+
+        diesel::insert_into(image_features_vit_l_14_336_px)
+            .values(&new_image_features)
+            .execute(connection)
+            .expect("Error inserting image features");
+    });
+
+    // The feature vectors should now be in the DB.
+    // TODO - We'll actually have some load_knn() fn or similar that queries for that after this is done.
+    //   We'll need a mechanism to keep that up-to-date with the DB.
 }

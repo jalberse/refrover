@@ -107,3 +107,10 @@ pub struct NewTag<'a> {
     pub id: &'a str,
     pub name: &'a str,
 }
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::image_features_vit_l_14_336_px)]
+pub struct NewImageFeaturesVitL14336Px<'a> {
+    pub id: &'a str,
+    pub feature_vector: &'a [u8],
+}
