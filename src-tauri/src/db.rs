@@ -2,18 +2,16 @@
 
 use std::fs;
 use std::path::Path;
-use std::str::FromStr;
 
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use serde_json::de;
 use uuid::Uuid;
 
 use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewTag};
 use crate::db;
-use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id, get_tag_trees};
+use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
