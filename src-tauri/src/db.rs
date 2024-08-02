@@ -18,14 +18,18 @@ use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id, get_tag_trees};
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 pub fn init() {
+    let db_exists = db_file_exists();
+
     if !db_file_exists() {
         create_db_file();
     }
-
+    
     run_migrations();
-
+    
     // TODO Remove this eventually, it's just for testing
-    populate_db_dummy_data();
+    if !db_exists {
+        populate_db_dummy_data();
+    }
 }
 
 pub fn establish_db_connection() -> SqliteConnection {

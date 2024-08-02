@@ -1,7 +1,9 @@
 use std::path::Path;
 
-use ndarray::{Array, Array2, ArrayView, Dim, IxDyn};
+use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
 use ort::{self, inputs, GraphOptimizationLevel, Tensor};
+
+use crate::preprocessing::FEATURE_VECTOR_LENGTH;
 
 pub struct ForwardResults
 {
@@ -64,18 +66,38 @@ impl Clip
         Ok( Clip { visual_session, text_session, forward_session } )
     }
 
-
     /// Given a batch of images, returns the image features encoded by the vision portion of the CLIP model.
     /// Use the preprocessing::load_image() function to load the image
     /// and convert it into an array for this input.
-    pub fn encode_image(&self, images: &Array<f32, Dim<[usize; 4]>>) -> Result<Tensor<f32>, ort::Error>
+    /// 
+    /// Returns a 2D array of shape (batch_size, FEATURE_VECTOR_LENGTH).
+    pub fn encode_image(&self, images: Array<f32, Dim<[usize; 4]>>) -> Result<Array2<f32>, ort::Error>
     {
-        // TODO Implement this
-        todo!()
+        let images_len = images.len_of(Axis(0));
+        let outputs = self.visual_session.run(inputs![images]?)?;
+
+        let output = &outputs["FEATURES_EMBEDDED"];
+
+        // First dimension is for each image in the batch; the second is the feature vector per image.
+        let output = output.try_extract_tensor::<f32>()?;
+
+        let output: Array2<f32> = output.to_shape((images_len, FEATURE_VECTOR_LENGTH)).unwrap().to_owned();
+
+        // For example:
+        // With one image in the batch....
+        // Output: [[0.51000077, ..., -0.37341008]],
+        //    shape=[1, 768], strides=[768, 1], layout=CFcf (0xf), dynamic ndim=2
+        // With two images in batch...
+        // Output: [[0.51000077, ..., -0.37341008], [-0.061004326, ..., -0.3435823]],
+        //    shape=[2, 768], strides=[768, 1], layout=Cc (0x5), dynamic ndim=2
+
+        Ok(output)
     }
 
     /// Given a batch of text tokens, returns the text features encoded by the language portion of the CLIP model.
     /// Generate tokens using preprocessing::tokenize_batch().
+    /// 
+    /// Returns a 2D array of shape (batch_size, FEATURE_VECTOR_LENGTH).
     pub fn encode_text(&self, tokens: Array2<i32>) -> Result<Tensor<f32>, ort::Error>
     {
         // TODO Implement this
@@ -98,8 +120,8 @@ impl Clip
             tokens
         ]?)?;
 
-        let logits_per_image: ArrayView<f32, IxDyn> = outputs[0].try_extract_tensor::<f32>()?;
-        let logits_per_text: ArrayView<f32, IxDyn> = outputs[1].try_extract_tensor::<f32>()?;
+        let logits_per_image: ArrayView<f32, IxDyn> = outputs["LOGITS_PER_IMAGE"].try_extract_tensor::<f32>()?;
+        let logits_per_text: ArrayView<f32, IxDyn> = outputs["LOGITS_PER_TEXT"].try_extract_tensor::<f32>()?;
 
         let logits_per_image = logits_per_image.to_owned();
         let logits_per_text = logits_per_text.to_owned();

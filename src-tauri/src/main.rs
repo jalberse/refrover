@@ -52,16 +52,23 @@ fn inference() -> Result<(), ort::Error>
         ];
         
     let all_tokens = preprocessing::tokenize_batch(input_texts);
-    let image_input: Array<f32, Dim<[usize; 4]>> = preprocessing::load_image(&Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("baseball.jpg"));
+    let image_input: Array<f32, Dim<[usize; 4]>> = preprocessing::load_image_batch(&vec![
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("baseball.jpg"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("data").join("CLIP.png")
+        ]);
         
     let clip = Clip::new()?;
-    let forward_results = clip.forward(image_input, all_tokens)?;
+    // let forward_results = clip.forward(image_input, all_tokens)?;
 
-    let probabilities = forward_results.logits_per_image.softmax(Axis(1));
+    let image_encodings = clip.encode_image(image_input);
+
+    println!("{:?}", image_encodings);
+
+    // let probabilities = forward_results.logits_per_image.softmax(Axis(1));
     
     // Convert the probabilities to a Vec
     // let probabilities = logits_per_image.iter().map(|x| x.to_owned()).collect::<Vec<_>>();
-    println!("Probabilities: {:?}", probabilities);
+    // println!("Probabilities: {:?}", probabilities);
 
     // TODO This comment below is from the onnx_converter. Listen to it.
     //        Need to transfer project to Ubuntu to actually run + test though lol (I hate python!!)

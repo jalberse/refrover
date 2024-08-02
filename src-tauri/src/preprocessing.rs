@@ -6,6 +6,7 @@ use ndarray::{Array, Array2, Dim};
 
 pub const IMAGE_INPUT_SIZE: usize = 336;
 pub const CONTEXT_LENGTH: usize = 77;
+pub const FEATURE_VECTOR_LENGTH: usize = 768;
 
 pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
 {
@@ -14,7 +15,7 @@ pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
 
 pub fn load_image_batch(paths: &Vec<PathBuf>) -> Array<f32, Dim<[usize; 4]>>
 {
-	let mut image_input = Array::zeros((1, 3, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE));
+	let mut image_input = Array::zeros((paths.len(), 3, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE));
 	for (idx, path) in paths.iter().enumerate()
 	{	
 		let original_img = image::open(path).unwrap();
