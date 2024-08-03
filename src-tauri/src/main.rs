@@ -3,14 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use std::path::Path;
-
-use app::preprocessing::CONTEXT_LENGTH;
-use app::{db, preprocessing};
-use app::clip::Clip;
-
-use ort::{inputs, ArrayExtensions, SessionOutputs};
-use ndarray::{Array, Axis, Dim};
+use app::{db}
 
 #[tauri::command]
 async fn on_button_clicked() -> String {

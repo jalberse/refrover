@@ -91,8 +91,6 @@ dependencies = [
  "dirs",
  "image 0.25.2",
  "instant-clip-tokenizer",
- "knn",
- "libsqlite3-sys",
  "ndarray",
  "ort",
  "rayon",
@@ -2208,12 +2206,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "knn"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1493b613f49e8a62498fe7ba0a9715a0b49b35072c0b32292a20dd5abe8c71d"
-
-[[package]]
 name = "kuchikiki"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2277,11 +2269,10 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.25.2"
+version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29f835d03d717946d28b1d1ed632eb6f0e24a299388ee623d0c23118d3e8a7fa"
+checksum = "56d90181c2904c287e5390186be820e5ef311a3c62edebb7d6ca3d6a48ce041d"
 dependencies = [
- "cc",
  "pkg-config",
  "vcpkg",
 ]
