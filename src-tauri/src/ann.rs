@@ -63,9 +63,6 @@ pub struct HnswElement {
 /// This may mean that the K nearest neighbors might in fact be fewer than K.
 pub struct HnswSearch<'a> {
     hnsw: Hnsw<'a, f32, DistCosine>,
-    max_nb_connection: usize,
-    nb_layer: usize,
-    ef_c: usize,
     /// The hnsw crate uses usize for the ID of the elements in the index.
     /// We need to map these to the UUIDs of the documents in the database.
     /// While usize may not be large enough to map 1:1 with UUIDs, we functionally
@@ -88,7 +85,12 @@ impl<'a> HnswSearch<'a>
         let mut hnsw = Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_c, DistCosine{});
         // Enabled according to ann-glove25-angular example from hnsw_rs.
         hnsw.set_extend_candidates(true);
-        HnswSearch { hnsw, max_nb_connection, nb_layer, ef_c, hnsw_id_to_file_id_map, current_id }
+        HnswSearch
+        { 
+            hnsw,
+            hnsw_id_to_file_id_map,
+            current_id
+        }
     }
 
     // TODO also add a method for parallel insertion with hnsw.parallel_insert_slice().
