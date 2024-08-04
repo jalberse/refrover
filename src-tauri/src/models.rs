@@ -114,3 +114,12 @@ pub struct NewImageFeaturesVitL14336Px<'a> {
     pub id: &'a str,
     pub feature_vector: &'a [u8],
 }
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::image_features_vit_l_14_336_px)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[derive(Serialize)]
+pub struct ImageFeatureVitL14336Px {
+    pub id: String,
+    pub feature_vector: Vec<u8>,
+}

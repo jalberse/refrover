@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use ndarray::{Array, Array2, Dim};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 pub const IMAGE_INPUT_SIZE: usize = 336;
 pub const CONTEXT_LENGTH: usize = 77;

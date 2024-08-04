@@ -8,11 +8,12 @@ use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
-use crate::models::{NewTagEdge, RowsAffected};
+use crate::models::{ImageFeatureVitL14336Px, NewTagEdge, RowsAffected};
 
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
@@ -496,4 +497,15 @@ pub fn get_tag_name(tag_id: Uuid, connection: &mut SqliteConnection) -> String
         .filter(tags::id.eq(tag_id.to_string()))
         .first(connection)
         .expect("Error loading tag name")
+}
+
+pub fn get_all_image_feature_data(connection: &mut SqliteConnection) -> Vec<ImageFeatureVitL14336Px>
+{
+   use crate::schema::image_features_vit_l_14_336_px::dsl::*;
+
+   let image_feature_data = image_features_vit_l_14_336_px
+      .select(ImageFeatureVitL14336Px::as_select())
+      .load(connection).expect("Error loading image feature data");
+
+   image_feature_data
 }
