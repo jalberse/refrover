@@ -1,5 +1,3 @@
--- Your SQL goes here
-
 -- Stores the feature vector of the image according to th ViT-L/14@335px model.
 -- The blob should be serialized/deserialized using bincode.
 -- We do not contain versioning information; if the feature space changes,

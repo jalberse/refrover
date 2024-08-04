@@ -37,9 +37,15 @@
 //     knn_neighbours_for_tests = hnsw.parallel_search(&anndata.test_data, knbn, ef_c);
 //     ....
 
+use std::sync::Mutex;
+
+use diesel::{query_dsl::methods::SelectDsl, RunQueryDsl, SelectableHelper};
 use hnsw_rs::{hnsw::Hnsw, prelude::DistCosine};
 use rustc_hash::FxHashMap;
+use tauri::{App, Manager};
 use uuid::Uuid;
+
+use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{InnerSearchState, SearchState}};
 
 const DEFAULT_MAX_NB_CONNECTION: usize = 24;
 const DEFAULT_NB_LAYER: usize = 16;
@@ -154,4 +160,23 @@ impl<'a> HnswSearch<'a>
     //   So make a new type that's similar to ImageFeatureVitL14336Px but which uses the UUID
     //   rather than String (we need to use String for SQLITE, but don't want that here).
     //   We can have from/into impls for both.
+}
+
+pub fn populate_hnsw(app: &mut App)
+{
+    // TODO This is crashing for some reason?
+    let connection = &mut db::get_db_connection();
+    
+    let results = SelectDsl::select(image_features_vit_l_14_336_px::table, ImageFeatureVitL14336Px::as_select())
+        .load::<ImageFeatureVitL14336Px>(connection).unwrap();
+
+    // Create the HnswElements
+    let hnsw_elements: Vec<HnswElement> = results.iter().map(|x| HnswElement { feature_vector: bincode::deserialize(&x.feature_vector[..]).unwrap(), id: Uuid::parse_str(&x.id).unwrap() }).collect();
+
+    // Get the HnswSearch from the app's SearchState
+    let state = app.state::<SearchState>();
+    let mut state = state.0.lock().unwrap();
+
+    // Add the elements to the Hnsw
+    state.hnsw.insert_slice(hnsw_elements);
 }

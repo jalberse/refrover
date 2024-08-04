@@ -5,3 +5,6 @@ pub mod queries;
 pub mod clip;
 pub mod preprocessing;
 pub mod ann;
+pub mod commands;
+pub mod state;
+pub mod error;
