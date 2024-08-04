@@ -156,34 +156,34 @@ fn populate_db_dummy_data_tags()
 
     // https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
     // Figure 5. Example of a DAG hierarchy.
-    add_tag_edge(admins_id, help_desk_id, &source_id.to_string(), connection);
-    add_tag_edge(admins_id, ali_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(admins_id, help_desk_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(admins_id, ali_id, &source_id.to_string(), connection);
 
-    add_tag_edge(users_id, ali_id, &source_id.to_string(), connection);
-    add_tag_edge(users_id, burcu_id, &source_id.to_string(), connection);
-    add_tag_edge(users_id, managers_id, &source_id.to_string(), connection);
-    add_tag_edge(users_id, technicians_id, &source_id.to_string(), connection);
-    add_tag_edge(users_id, can_id, &source_id.to_string(), connection);
-    add_tag_edge(users_id, engin_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(users_id, ali_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(users_id, burcu_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(users_id, managers_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(users_id, technicians_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(users_id, can_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(users_id, engin_id, &source_id.to_string(), connection);
 
-    add_tag_edge(help_desk_id, demet_id, &source_id.to_string(), connection);
-    add_tag_edge(help_desk_id, engin_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(help_desk_id, demet_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(help_desk_id, engin_id, &source_id.to_string(), connection);
 
-    add_tag_edge(managers_id, fuat_id, &source_id.to_string(), connection);
-    add_tag_edge(managers_id, gul_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(managers_id, fuat_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(managers_id, gul_id, &source_id.to_string(), connection);
 
-    add_tag_edge(technicians_id, hakan_id, &source_id.to_string(), connection);
-    add_tag_edge(technicians_id, irmak_id, &source_id.to_string(), connection);
-    add_tag_edge(technicians_id, abctech_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(technicians_id, hakan_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(technicians_id, irmak_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(technicians_id, abctech_id, &source_id.to_string(), connection);
     
-    add_tag_edge(abctech_id, jale_id, &source_id.to_string(), connection);
+    let _ = add_tag_edge(abctech_id, jale_id, &source_id.to_string(), connection);
 
     // Get the tag edge ID between technicians and abc tech.
     let tag_edge_id = get_edge_id(technicians_id, abctech_id, &source_id.to_string(), connection).expect("Error finding edge ID");
 
     // Delete the tag edge between technicians and abc tech.
     // This is just to show that we can delete edges.
-    delete_tag_edge(tag_edge_id, connection);
+    let _ = delete_tag_edge(tag_edge_id, connection);
 
     // let tree = get_tag_trees(connection);
     // println!("{:?}", tree);
