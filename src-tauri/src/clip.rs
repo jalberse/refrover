@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
-use ort::{self, inputs, CUDAExecutionProvider, GraphOptimizationLevel, TensorRTExecutionProvider};
+use ort::{self, inputs, GraphOptimizationLevel, TensorRTExecutionProvider};
 
 use crate::preprocessing::FEATURE_VECTOR_LENGTH;
 
@@ -32,6 +32,8 @@ impl Clip
     {
         // TODO We need to ensure that we are using the CUDA execution provide when available,
         //   with CPU as a fallback. There's some examples of this online.
+
+        // TODO Add Other execution providers, including CUDA.
 
         // TODO Ensure we can load models when shipping executables;
         //    We will ship the ONNX files.
