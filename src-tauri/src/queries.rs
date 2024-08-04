@@ -8,7 +8,6 @@ use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
-use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
