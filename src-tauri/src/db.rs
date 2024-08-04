@@ -32,7 +32,8 @@ pub fn init() {
     }
 }
 
-pub fn establish_db_connection() -> SqliteConnection {
+pub fn get_db_connection() -> SqliteConnection {
+    // TODO Here, we should instead get it from the AppState's pool of connections.
     let db_path = get_db_path().clone();
 
     SqliteConnection::establish(db_path.as_str())
@@ -91,7 +92,7 @@ fn populate_db_dummy_data_tags()
     use crate::schema::{base_directories, file_tags, files, tags};
 
     let base_dir = "D:\\vizlib_photos";
-    let connection = &mut db::establish_db_connection();
+    let connection = &mut db::get_db_connection();
 
     // TODO - This would be initialized somewhere else. Probably populated when the db file is first created.
     let source_id = Uuid::new_v4();
@@ -295,7 +296,7 @@ fn populate_image_features()
     // Load our CLIP model.
     let clip = clip::Clip::new().unwrap();
 
-    let connection = &mut db::establish_db_connection();
+    let connection = &mut db::get_db_connection();
 
     let all_files: Vec<(String, String, String)> = base_directories.inner_join(files)
         .select((schema::files::dsl::id, path, relative_path))

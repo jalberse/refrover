@@ -44,17 +44,23 @@ use uuid::Uuid;
 const DEFAULT_MAX_NB_CONNECTION: usize = 24;
 const DEFAULT_NB_LAYER: usize = 16;
 const DEFAULT_EF_C: usize = 400;
-// TODO - Verify that hnsw_rs grows this correctly by setting it to a lower value.
+// TODO - Verify that hnsw_rs grows this correctly.
 /// The default max number of elements in the HNSW index on creation.
 /// This can grow/shink dynamically as elements are added/removed.
 const DEFAULT_MAX_ELEMS: usize = 1000;
 
 #[derive(Debug, Clone)]
-pub struct HnswElement<'a> {
-    pub feature_vector: &'a [f32],
+pub struct HnswElement {
+    pub feature_vector: Vec<f32>,
     pub id: Uuid,
 }
 
+/// Note that HNSW does not support removing points.
+/// To resolve this, the HNSW structure is rebuilt on start-up each time,
+/// which should be fast enough for our application with just a few tens
+/// of thousands of images at most. This does mean that IDs returned by
+/// a query may not be valid if the corresponding image has been removed.
+/// This may mean that the K nearest neighbors might in fact be fewer than K.
 pub struct HnswSearch<'a> {
     hnsw: Hnsw<'a, f32, DistCosine>,
     max_nb_connection: usize,
@@ -104,7 +110,7 @@ impl<'a> HnswSearch<'a>
         let data_for_par_insertion: Vec<(&[f32], usize)> = data
             .iter()
             .zip(ids.iter())
-            .map(|(elem, id)| (elem.feature_vector, *id))
+            .map(|(elem, id)| (&elem.feature_vector[..], *id))
             .collect();
         // Insert the elements into the HNSW index
         for d in data_for_par_insertion.iter()
