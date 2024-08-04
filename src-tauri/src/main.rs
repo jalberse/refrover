@@ -81,7 +81,7 @@ fn main() {
                 }));
 
             populate_hnsw(app);
-            test_hnsw_with_query(app);
+            // test_hnsw_with_query(app);
 
             Ok(())
         })
@@ -111,6 +111,15 @@ fn populate_hnsw(app: &mut App)
 
 // TODO We'll delete this, but keeping it for dev (we'll grab snippets for a command later
 //    where query gets sourced from the search bar)
+//  Also including this causes the app to crash (ie continually restart)
+//    but it does write the query out lol, so I think the error is in the file stuff.
+//    Won't investigate much now because we'll delete this soon anyways. Just move onto adding a command
+//     to do similar and return the results to the front-end instead, and hook it up
+//     to the search bar.
+//  Actually I think it's funnier than that: it restarts because tauri
+//    is listening for new files in src-tauri/ and rebuilding when it finds it.
+//    So we're not actually crashing. That's really funny and I would have kms
+//    if I actually had to solve that.
 fn test_hnsw_with_query(app: &mut App)
 {
     let connection = &mut db::get_db_connection();
