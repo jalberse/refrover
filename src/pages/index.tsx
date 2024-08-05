@@ -17,6 +17,7 @@ export const Home: React.FC = () => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const query = searchParams.get("query") ?? ""
 
+  // TODO Delete this lol.
   const shortcutHandler = useCallback(() => {
     console.log("Ctrl+P was pressed!")
   }, [])

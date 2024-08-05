@@ -9,43 +9,13 @@
 /// It can also easily be used for reverse image search by using the output of
 /// encode_image() as the search vector instead.
 
-// TODO Rather than a Lazy one like I thought we might have, instead start by defining
-//    some hnsw_search struct that wraps everything. We can either lazy initialize that or
-//    initialize it in Setup and keep it around in some AppState struct or something.
-
-// Actually this is fine I guess. 
-//     //  reading data
-//     let anndata = AnnBenchmarkData::new(fname).unwrap();
-//     let nb_elem = anndata.train_data.len();
-//     let max_nb_connection = 24;
-//     let nb_layer = 16.min((nb_elem as f32).ln().trunc() as usize);
-//     let ef_c = 400;
-//     // allocating network
-//     let mut hnsw =  Hnsw::<f32, DistL2>::new(max_nb_connection, nb_elem, nb_layer, ef_c, DistL2{});
-//     hnsw.set_extend_candidates(false);
-//     // parallel insertion of train data
-//     let data_for_par_insertion = anndata.train_data.iter().map( |x| (&x.0, x.1)).collect();
-//     hnsw.parallel_insert(&data_for_par_insertion);
-//     //
-//     hnsw.dump_layer_info();
-//     //  Now the bench with 10 neighbours
-//     let mut knn_neighbours_for_tests = Vec::<Vec<Neighbour>>::with_capacity(nb_elem);
-//     hnsw.set_searching_mode(true);
-//     let knbn = 10;
-//     let ef_c = max_nb_connection;
-//     // search 10 nearest neighbours for test data
-//     knn_neighbours_for_tests = hnsw.parallel_search(&anndata.test_data, knbn, ef_c);
-//     ....
-
-use std::sync::Mutex;
-
 use diesel::{query_dsl::methods::SelectDsl, RunQueryDsl, SelectableHelper};
 use hnsw_rs::{hnsw::Hnsw, prelude::DistCosine};
 use rustc_hash::FxHashMap;
 use tauri::{App, Manager};
 use uuid::Uuid;
 
-use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{InnerSearchState, SearchState}};
+use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::SearchState};
 
 const DEFAULT_MAX_NB_CONNECTION: usize = 24;
 const DEFAULT_NB_LAYER: usize = 16;
