@@ -19,7 +19,7 @@ use image;
 // TODO If the distance is large enough, we should not include it in the results.
 //   i.e. we need to filter the search_results on the distance to pass some constant threshold (tweaked by us)
 #[tauri::command]
-pub async fn search_images<'a>(query_string: &str, state: tauri::State<'_, SearchState<'a>>) -> Result<Vec<String>, String> {
+pub async fn search_images<'a>(query_string: &str, state: tauri::State<'_, SearchState<'a>>) -> Result<Vec<(usize, String)>, String> {
     if query_string.is_empty() {
         return Ok(vec![]);
     }
@@ -52,17 +52,18 @@ pub async fn search_images<'a>(query_string: &str, state: tauri::State<'_, Searc
         .load::<(String, String, String)>(connection).unwrap();
 
     // Combine the base directories and relative paths
-    let results: Vec<String> = all_files.iter().map(|(_, base_dir, rel_path)| {
+    let filepaths: Vec<String> = all_files.into_iter().map(|(_, base_dir, rel_path)| {
         PathBuf::from(base_dir).join(rel_path)
     }).map(|x| x.to_str().unwrap().to_string()).collect();
 
     // Read the files and get a base64 encoding of the image.
     // We can return that to the front-end to display the images.
-    // 
-    let results: Vec<String> = results.iter().map(|x| {
-        let img = image::open(x).unwrap();
-        junk_drawer::image_to_base64(&img)
-    }).collect();
+    // Save with an explicit key for React to use.
+    let results: Vec<(usize, String)> = filepaths.into_iter().enumerate().map(|(i, x)| {
+            let img = image::open(x).unwrap();
+            let b64 = junk_drawer::image_to_base64(&img);
+            (i, b64)
+        }).collect();
 
     Ok(results)
 }

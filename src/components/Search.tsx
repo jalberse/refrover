@@ -29,7 +29,6 @@ export default function Search({ placeholder }: { placeholder: string }) {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
   const handleSearch = useDebouncedCallback((term) => {
     // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-    console.log(`Searching... ${term}`)
     const params = new URLSearchParams(searchParams)
     if (term) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
