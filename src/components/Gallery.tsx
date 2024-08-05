@@ -3,24 +3,22 @@
 import { Suspense, useEffect, useState } from "react"
 import { fetchImages } from "../api"
 
-interface AssetTableProps {
+interface GalleryProps {
   search_text: string
 }
 
-export const AssetTable: React.FC<AssetTableProps> = ({
+export const Gallery: React.FC<GalleryProps> = ({
   search_text,
-}: AssetTableProps) => {
+}: GalleryProps) => {
   // TODO Use a skeleton instead of "Loading..."
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <AssetTableContent search_text={search_text} />
+      <GalleryContent search_text={search_text} />
     </Suspense>
   )
 }
 
-const AssetTableContent: React.FC<{ search_text: string }> = ({
-  search_text,
-}) => {
+const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   const [data, setData] = useState<[number, string][] | null>(null)
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { AssetTable } from "@/components/AssetTable"
+import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
 import TagHierarchy from "@/components/TagHierarchy"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
@@ -45,11 +45,11 @@ export const Home: React.FC = () => {
         </div>
 
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
-          <TagHierarchy></TagHierarchy>
+          <TagHierarchy />
         </div>
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
           <Suspense key={query} fallback={<div>Loading...</div>}>
-            <AssetTable search_text={query} />
+            <Gallery search_text={query} />
           </Suspense>
         </div>
       </main>
