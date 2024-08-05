@@ -1,11 +1,12 @@
-pub mod models;
-pub mod schema;
+mod models;
+mod schema;
 pub mod db;
-pub mod queries;
+mod queries;
 pub mod clip;
-pub mod preprocessing;
+mod preprocessing;
 pub mod ann;
 pub mod commands;
 pub mod state;
-pub mod error;
+mod error;
 mod junk_drawer;
+mod thumbnails;

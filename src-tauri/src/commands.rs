@@ -7,7 +7,6 @@ use crate::{db, preprocessing, state::SearchState};
 
 use crate::{junk_drawer, schema};
 
-use image;
 
 // TODO Note that this currently returns base64 png encodings of the images.
 //      This is because the front-end is not allowed to access arbitrary files on the system
