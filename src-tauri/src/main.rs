@@ -52,10 +52,6 @@ fn main() {
             //  Hopefully insertion does not take so long that it's a problem every time we start up?
             //  Well, maybe we can serialize the HNSW data structure periodically and just load it on launch?
 
-            // https://v2.tauri.app/develop/state-management/
-            // See this for how we'll manage state. The KNN can live in there behind a mutex.
-            // We can initialize it here and then store it in the state. Possibly ensure it's heap-allocated.
-
             // TODO I think that we want to enable the r2d2 feature and also
             //   maintain a connection pool in the app state.
             //   Then update db::get_db_connection() to use that instead.
