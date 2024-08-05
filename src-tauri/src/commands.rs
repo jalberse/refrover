@@ -8,8 +8,14 @@ use crate::{junk_drawer, schema};
 
 use image;
 
-// TODO talk about why we return  base64 encoding (can't read files from the front-end for security reasons, see this
-//      contentious issue: https://github.com/tauri-apps/tauri/issues/3591
+// TODO Note that this currently returns base64 png encodings of the images.
+//      This is because the front-end is not allowed to access arbitrary files on the system
+//      (which I think is dumb - see https://github.com/tauri-apps/tauri/issues/3591 contention).
+//      But nevertheless, eventually we want to move to displaying *thumbnails* in the vast majority of cases,
+//      which we'll be able to store in a whitelisted location for the frontend.
+//      So bear in mind this command API will change to accomodate that (returning a struct
+//      with data related to thumbnail paths etc most likely, with base64 as some fallback for edge cases
+//      such as very wide images that we can't thumbnail effectively).
 // TODO If the distance is large enough, we should not include it in the results.
 //   i.e. we need to filter the search_results on the distance to pass some constant threshold (tweaked by us)
 #[tauri::command]
