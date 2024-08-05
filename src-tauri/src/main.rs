@@ -10,6 +10,7 @@ use app::ann::HnswSearch;
 use app::db;
 use app::state::InnerSearchState;
 use app::state::SearchState;
+use tauri::Manager;
 
 // TODO: How do we want to handle new files that are added to watched dirs?
 // We need a FileSystemWatcher likely.
@@ -28,6 +29,7 @@ use app::state::SearchState;
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_persisted_scope::init())
         .manage(
             SearchState(
                     Mutex::new(InnerSearchState { hnsw: HnswSearch::new() })
@@ -50,6 +52,9 @@ fn main() {
             //   maintain a connection pool in the app state.
             //   Then update db::get_db_connection() to use that instead.
             // https://docs.rs/diesel/latest/diesel/r2d2/index.html
+
+            // TODO Remove this, just doing for now...
+            tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\vizlib_photos", true).expect("Failed to allow access");
 
             ann::populate_hnsw(app);
             // test_hnsw_with_query(app);
