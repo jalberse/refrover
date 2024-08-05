@@ -7,7 +7,10 @@ use std::sync::Mutex;
 
 use app::ann;
 use app::ann::HnswSearch;
+use app::clip::Clip;
 use app::db;
+use app::state::ClipState;
+use app::state::InnerClipState;
 use app::state::InnerSearchState;
 use app::state::SearchState;
 use tauri::Manager;
@@ -30,6 +33,11 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())
+        .manage(
+            ClipState(
+                    Mutex::new(InnerClipState { clip: Clip::new().unwrap() })
+                )
+            )
         .manage(
             SearchState(
                     Mutex::new(InnerSearchState { hnsw: HnswSearch::new() })

@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 
-use crate::{clip::Clip, db, preprocessing, state::SearchState};
+use crate::state::ClipState;
+use crate::{db, preprocessing, state::SearchState};
 
 use crate::{junk_drawer, schema};
 
@@ -19,20 +20,25 @@ use image;
 // TODO If the distance is large enough, we should not include it in the results.
 //   i.e. we need to filter the search_results on the distance to pass some constant threshold (tweaked by us)
 #[tauri::command]
-pub async fn search_images<'a>(query_string: &str, state: tauri::State<'_, SearchState<'a>>) -> Result<Vec<(usize, String)>, String> {
+pub async fn search_images<'a>(
+        query_string: &str,
+        search_state: tauri::State<'_, SearchState<'a>>,
+        clip_state: tauri::State<'_, ClipState>,
+    ) -> Result<Vec<(usize, String)>, String>
+{
     if query_string.is_empty() {
         return Ok(vec![]);
     }
 
     let connection = &mut db::get_db_connection();
 
-    let mut hnsw_search = state.0.lock().unwrap();
+    let mut hnsw_search = search_state.0.lock().unwrap();
     let hnsw = &mut hnsw_search.hnsw;
 
     let query = preprocessing::tokenize(query_string);
 
-    // TODO We should also have CLIP in the state, since we'll only never need one instance.
-    let clip = Clip::new().unwrap();
+    let clip = &mut clip_state.0.lock().unwrap().clip;
+
     let query_vector = clip.encode_text(query).unwrap();
 
     let query_vector_slice = query_vector.as_slice().unwrap();
