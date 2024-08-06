@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::state::ClipState;
 use crate::{db, preprocessing, state::SearchState};
 
-use crate::{junk_drawer, schema};
+use crate::{junk_drawer, schema, thumbnails};
 
 
 // TODO Note that this currently returns base64 png encodings of the images.
@@ -52,4 +52,32 @@ pub async fn search_images<'a>(
     let search_results_uuids: Vec<String> = search_results.iter().map(|x| x.0.to_string()).collect();
 
     Ok(search_results_uuids)
+}
+
+// TODO Commands to match new API endpoints. Should be relatively simple.
+//   We should grab metadata directly from the filesystem rather than trying to store our own (eventually, we will store both our own metadata and fs ones)
+
+// TODO Metadata command
+
+/// Fetches the thumbnail filenames for a list of file IDs.
+/// Returns a list of (thumbnail UUID, thumbnail filename) for the files.
+/// The intention is the frontend can use the filename in an Image tag.
+/// The UUID is returns for React to map elements if necessary on a unique ID.
+/// Note that the UUID is *not* the file ID, but the UUID of the thumbnail.
+/// The filename is local to APPDATA.
+#[tauri::command]
+pub async fn fetch_thumbnails(file_ids: Vec<String>, app_handle: tauri::AppHandle) -> Result<Vec<(String, String)>, String>
+{
+    let mut connection = db::get_db_connection();
+
+    let mut results = vec![];
+    for file_id in file_ids {
+        let (thumbnail_uuid, thumbnail_filename) = thumbnails::ensure_thumbnail_exists(
+            Uuid::parse_str(&file_id).unwrap(),
+            &app_handle,
+            &mut connection);
+        results.push((thumbnail_uuid.to_string(), thumbnail_filename));
+    }
+
+    Ok(results)
 }

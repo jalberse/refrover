@@ -30,6 +30,8 @@ use tauri::Manager;
 //    use it from the frontend when we know we are adding new files via a more
 //    "official" path (like a button in the UI).
 
+// TODO - 
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())

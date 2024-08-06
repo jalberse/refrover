@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
-use crate::models::{ImageFeatureVitL14336Px, NewTagEdge, RowsAffected};
+use crate::models::{ImageFeatureVitL14336Px, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
 
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
@@ -508,3 +508,60 @@ pub fn get_all_image_feature_data(connection: &mut SqliteConnection) -> Vec<Imag
 
    image_feature_data
 }
+
+pub fn insert_thumbnail(thumbnail: &NewThumbnail, connection: &mut SqliteConnection)
+{
+   use crate::schema::thumbnails;
+
+   diesel::insert_into(thumbnails::table)
+      .values(thumbnail)
+      .execute(connection)
+      .expect("Error inserting thumbnail");
+}
+
+/// Gets the thumbnail data for the given file ID.
+/// Returns NONE if the thumbnail does not exist in the table for the file ID.
+pub fn get_thumbnail_by_file_id(file_id: Uuid, connection: &mut SqliteConnection) -> Option<Thumbnail>
+{
+   use crate::schema::thumbnails;
+
+   let thumbnail = thumbnails::table
+      .select(Thumbnail::as_select())
+      .filter(thumbnails::file_id.eq(file_id.to_string()))
+      .first(connection)
+      .optional()
+      .expect("Error loading thumbnail data");
+
+   thumbnail
+}
+
+pub fn delete_thumbnail_by_id(thumbnail_id: Uuid, connection: &mut SqliteConnection)
+{
+   use crate::schema::thumbnails;
+
+   diesel::delete(thumbnails::table.filter(thumbnails::id.eq(thumbnail_id.to_string())))
+      .execute(connection)
+      .expect("Error deleting thumbnail");
+}
+
+pub fn get_filepath(file_id: Uuid, connection: &mut SqliteConnection) -> Option<PathBuf>
+{
+   use crate::schema::files;
+   use crate::schema::base_directories;
+
+   let paths = files::table
+      .inner_join(base_directories::table)
+      .select((base_directories::path, files::relative_path))
+      .filter(files::id.eq(file_id.to_string()))
+      .first(connection)
+      .optional()
+      .expect("Error loading file path");
+
+   let (base_dir, rel_path): (String, String) = paths?;
+
+   let base_dir = PathBuf::from(base_dir);
+   let rel_path = PathBuf::from(rel_path);
+   Some(base_dir.join(rel_path))
+}
+
+// TODO Do a dimilar function, but which takes a set of file_ids and returns a map of file_id to thumbnail data.

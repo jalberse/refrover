@@ -49,10 +49,19 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    thumbnails (id) {
+        id -> Text,
+        file_id -> Text,
+        path -> Text,
+    }
+}
+
 diesel::joinable!(file_tags -> files (file_id));
 diesel::joinable!(file_tags -> tags (tag_id));
 diesel::joinable!(files -> base_directories (base_directory_id));
 diesel::joinable!(image_features_vit_l_14_336_px -> files (id));
+diesel::joinable!(thumbnails -> files (file_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     base_directories,
@@ -61,4 +70,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     image_features_vit_l_14_336_px,
     tag_edges,
     tags,
+    thumbnails,
 );

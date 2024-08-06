@@ -123,3 +123,21 @@ pub struct ImageFeatureVitL14336Px {
     pub id: String,
     pub feature_vector: Vec<u8>,
 }
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::thumbnails)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[derive(Serialize)]
+pub struct Thumbnail {
+    pub id: String,
+    pub file_id: String,
+    pub path: String,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::thumbnails)]
+pub struct NewThumbnail<'a> {
+    pub id: &'a str,
+    pub file_id: &'a str,
+    pub path: &'a str,
+}
