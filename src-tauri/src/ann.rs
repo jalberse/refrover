@@ -20,16 +20,17 @@ use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14
 const DEFAULT_MAX_NB_CONNECTION: usize = 24;
 const DEFAULT_NB_LAYER: usize = 16;
 const DEFAULT_EF_C: usize = 400;
-// TODO - Verify that hnsw_rs grows this correctly.
-/// The default max number of elements in the HNSW index on creation.
-/// This can grow/shink dynamically as elements are added/removed.
-const DEFAULT_MAX_ELEMS: usize = 100;
+const DEFAULT_MAX_ELEMS: usize = 10000;
 
 #[derive(Debug, Clone)]
 pub struct HnswElement {
     pub feature_vector: Vec<f32>,
     pub id: Uuid,
 }
+
+// TODO We need to ensure that all vectors are L2 normalized before insertion or query.
+    //   Probably store them as such in the DB?
+    //   The reason is so that the cosine distance is equivalent to the dot product, and cheaper.
 
 /// Note that HNSW does not support removing points.
 /// To resolve this, the HNSW structure is rebuilt on start-up each time,
@@ -69,11 +70,6 @@ impl<'a> HnswSearch<'a>
         }
     }
 
-    // TODO also add a method for parallel insertion with hnsw.parallel_insert_slice().
-    //      however, this is only efficient if the number of elements is large
-    //     (greater than 1000 * numThreads). For now, we likely don't need that.
-    // TODO Also consider adding a parallel search method, though it isn't currently needed.
-
     pub fn insert_slice(&mut self, data: Vec<HnswElement>)
     {
         // Generate the IDs for the elements
@@ -108,6 +104,8 @@ impl<'a> HnswSearch<'a>
     {
         let knn_neighbours = self.hnsw.search(query, knbn, ef_arg);
         // Map the IDs to the UUIDs. Neighbor.d_id (short for data_id) corresponds to the usize ID.
+
+        // TODO Filter these results based on some constant, tweak it.
         let results: Vec<(Uuid, f32)> = knn_neighbours
             .iter()
             .map(|n| -> (Uuid, f32)
@@ -117,21 +115,10 @@ impl<'a> HnswSearch<'a>
             .collect();
         results
     }
-
-    // TODO We need to ensure that all vectors are L2 normalized before insertion or query.
-    //   Probably store them as such in the DB.
-    //   The reason is so that the cosine distance is equivalent to the dot product, and cheaper.
-
-    // TODO Insertion and search functions
-    //   We need to store the UUID with the feature vectors that get stored so we can actually
-    //   go fetch the document.
-    //   The usize param in the insert function from the example code should be replaced by our UUID.
-    //   And rather than a Tuple, we should have the vector + UUID. I suppose we could just
-    //   So make a new type that's similar to ImageFeatureVitL14336Px but which uses the UUID
-    //   rather than String (we need to use String for SQLITE, but don't want that here).
-    //   We can have from/into impls for both.
 }
 
+/// Populates the HNSW index with the feature vectors from the database, intended for startup.
+/// As more images are added to the application during runtime, they should be added to the HNSW index as necessary.
 pub fn populate_hnsw(app: &mut App)
 {
     let pool_state = app.state::<ConnectionPoolState>();

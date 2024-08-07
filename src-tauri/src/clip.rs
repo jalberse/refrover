@@ -33,7 +33,7 @@ impl Clip
         // TODO We need to ensure that we are using the CUDA execution provide when available,
         //   with CPU as a fallback. There's some examples of this online.
 
-        // TODO Add Other execution providers, including CUDA.
+        // TODO Add Other execution providers, including CUDA. Add to with_execution_providers() call in order of precedence.
 
         // TODO Ensure we can load models when shipping executables;
         //    We will ship the ONNX files.
@@ -55,6 +55,8 @@ impl Clip
         //       It's advantageous to split these.
         //   We also definitely want to initiate the session once on startup and keep it around the whole process.
 
+        // TODO It's failing to load the TensorRT execution provider. I think it's because it's not finding the TensorRT libraries.
+        //  It's looking here: \"D:\\projects\\VizLib\\vizlib\\src-tauri\\target\\debug\\onnxruntime_providers_tensorrt.dll
         let visual_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
