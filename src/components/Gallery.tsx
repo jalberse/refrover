@@ -46,11 +46,6 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     return null
   }
 
-  // TODO I'm now getting this: Not allowed to load local resource
-  //    I think I need to whitelist the APPDATA dir for tauri?
-
-  // We need to call convertFileSrc() on each thumbnail path to get a valid URL.
-
   // TODO - Actually, move this into the api. We should do any necessary conversion there. I'm just working on the parallel thumbnail creation for now.
   const thumbnailFilepathsConverted = thumbnailFilepaths.map((thumbnail) => {
     return [thumbnail[0], convertFileSrc(thumbnail[1])]
