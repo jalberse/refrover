@@ -1,6 +1,5 @@
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
-import TagHierarchy from "@/components/TagHierarchy"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import Head from "next/head"
 import Image from "next/image"
@@ -45,9 +44,6 @@ export const Home: React.FC = () => {
           <Search placeholder="Search for reference..." />
         </div>
 
-        <div className="flex max-w-3xl flex-wrap items-center justify-center">
-          <TagHierarchy />
-        </div>
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
           <Suspense key={query} fallback={<div>Loading...</div>}>
             <Gallery search_text={query} />

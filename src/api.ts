@@ -45,15 +45,19 @@ export async function fetchThumbnails(queryString: string) {
     // Fetch the thumbnails for these files.
     const fileUuids = result.flat()
 
+    console.log("fileUuids", fileUuids)
+
     try {
       const result = await invoke<Record<string, string>>("fetch_thumbnails", {
-        fileUuids,
+        fileIds: fileUuids,
       })
       return result
     } catch (error) {
+      console.error("Error fetching thumbnails:", error)
       throw new Error("Failed to fetch thumbnails")
     }
   } catch (error) {
+    console.error("Error fetching image UUIDs:", error)
     throw new Error("Failed to fetch image UUIDs")
   }
 }

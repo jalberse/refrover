@@ -1,10 +1,12 @@
+use std::path::Path;
+
 use diesel::SqliteConnection;
 use image::{DynamicImage, GenericImageView, ImageBuffer};
 
 use rayon::prelude::*;
 use uuid::Uuid;
 
-use crate::{models::NewThumbnail, queries};
+use crate::{db, models::NewThumbnail, queries};
 
 const MAX_THUMBNAIL_DIMENSION: u32 = 600;
 
@@ -36,16 +38,21 @@ pub fn thumbnail_parallel(
 /// If an entry for the thumbnail exists in the database but not on disk, the old
 /// database entry is deleted and a new thumbnail is generated.
 /// If a thumbnail does not exist, it is generated and saved to disk and the database.
-/// Returns the UUID of the thumbnail and the filename of the thumbnail.
+/// 
+/// Returns the UUID of the thumbnail and the full path to the filename (typically in $APPDATA),
+/// inclusing a file::// prefix for rendering in the browser.
 pub fn ensure_thumbnail_exists(
     file_id: Uuid,
-    app_handle: &tauri::AppHandle,
-    connection: &mut SqliteConnection,
+    app_handle: &tauri::AppHandle
 ) -> (Uuid, String)
 {
+    let mut connection = db::get_db_connection();
+
     let app_data_path = app_handle.path_resolver().app_data_dir().unwrap();
 
-    let db_thumbnail = queries::get_thumbnail_by_file_id(file_id, connection);
+    println!("App data path: {:?}", app_data_path);
+
+    let db_thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection);
 
     match db_thumbnail
     {
@@ -54,12 +61,12 @@ pub fn ensure_thumbnail_exists(
             let full_path = app_data_path.join(&thumbail.path);
 
             if full_path.exists() {
-                return (Uuid::parse_str(&thumbail.id).unwrap(), thumbail.path);
+                return (Uuid::parse_str(&thumbail.id).unwrap(), full_path.to_str().unwrap().to_string());
             }
 
             // The thumbnail exists in the DB but not on disk.
             // Delete the DB entry.
-            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id).unwrap(), connection);
+            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id).unwrap(), &mut connection);
         },
         None => {},
     }
@@ -71,15 +78,14 @@ pub fn ensure_thumbnail_exists(
     let new_thumbnail_filename = format!("{}.webp", new_thumbnail_id);
     let new_thumbnail_full_path = app_data_path.join(&new_thumbnail_filename);
 
-    // TODO Does this handle EXIF rotation? Conversion to base64 doesn't,
-    // but this may be fine. We have an issue open regarding this, image may
+    // TODO This does not handle EXIF rotation. We have a VIZLIB issue open regarding this, image may
     // get a fix for it very soon as well.
 
     // Create the thumbnail + save it
-    let file_path = queries::get_filepath(file_id, connection).unwrap();
+    let file_path = queries::get_filepath(file_id, &mut connection).unwrap();
     let orig_image = image::open(file_path).unwrap();
     let thumbnail = thumbnail(&orig_image);
-    thumbnail.save_with_format(new_thumbnail_full_path, image::ImageFormat::WebP).unwrap();
+    thumbnail.save_with_format(new_thumbnail_full_path.clone(), image::ImageFormat::WebP).unwrap();
 
     // Add the thumbnail to the thumbnails table.
     let new_thumbnail_db = NewThumbnail {
@@ -88,7 +94,11 @@ pub fn ensure_thumbnail_exists(
         path: &new_thumbnail_filename,
     };
 
-    queries::insert_thumbnail(&new_thumbnail_db, connection);
+    queries::insert_thumbnail(&new_thumbnail_db, &mut connection);
 
-    (new_thumbnail_id, new_thumbnail_filename)
+    // TODO Should we still do this if using the asset revolving from Tauri?
+    let file_prepend = Path::new("file://");
+    let full_path = file_prepend.join(new_thumbnail_full_path).to_str().unwrap().to_string();
+
+    (new_thumbnail_id, full_path)
 }

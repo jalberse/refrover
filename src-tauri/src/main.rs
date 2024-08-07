@@ -67,7 +67,10 @@ fn main() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app::commands::search_images])
+        .invoke_handler(tauri::generate_handler![
+            app::commands::search_images,
+            app::commands::fetch_thumbnails,
+            ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

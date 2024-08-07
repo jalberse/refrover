@@ -1,7 +1,7 @@
 "use client"
 
-import { appDataDir } from "@tauri-apps/api/path"
-import Image from "next/image"
+// import Image from "next/image"
+import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Suspense, useEffect, useState } from "react"
 import { fetchThumbnails } from "../api"
 
@@ -21,17 +21,17 @@ export const Gallery: React.FC<GalleryProps> = ({
 }
 
 const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
-  const [thumbnailFilenames, setThumbnailFilenames] = useState<
+  const [thumbnailFilepaths, setThumbnailFilepaths] = useState<
     Record<string, string>[] | null
   >(null)
-  const [appDataDirPath, setAppDataDirPath] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const result = await fetchThumbnails(search_text)
+        console.log(result)
         // Ensure result is an array
-        setThumbnailFilenames(Array.isArray(result) ? result : [result])
+        setThumbnailFilepaths(Array.isArray(result) ? result : [result])
       } catch (error) {
         console.error(error)
       }
@@ -42,48 +42,32 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     })
   }, [search_text])
 
-  useEffect(() => {
-    const fetchAppDataDir = async () => {
-      try {
-        const path = await appDataDir()
-        setAppDataDirPath(path)
-      } catch (error) {
-        console.error(error)
-      }
-    }
-
-    fetchAppDataDir().catch((error: unknown) => {
-      console.error(error)
-    })
-  }, [])
-
-  if (!thumbnailFilenames) {
+  if (!thumbnailFilepaths) {
     return null
   }
 
-  if (!appDataDirPath) {
-    return null
-  }
+  // TODO I'm now getting this: Not allowed to load local resource
+  //    I think I need to whitelist the APPDATA dir for tauri?
 
-  // TODO Joining OS paths in the browser is not a good idea.
-  //      We should just return the full paths from Rust, including the appdata dir, and preprended with file://
-  //      That also means we don't need the compelexity of fetching the appDataDirPath here.
+  // We need to call convertFileSrc() on each thumbnail path to get a valid URL.
 
-  // The thumbnailFilenames are relative to the appDataDirPath.
-  // thumbnailFilenames contains (UUID, filename) pairs.
-  // Display them in a grid.
+  // TODO - Actually, move this into the api. We should do any necessary conversion there. I'm just working on the parallel thumbnail creation for now.
+  const thumbnailFilepathsConverted = thumbnailFilepaths.map((thumbnail) => {
+    return [thumbnail[0], convertFileSrc(thumbnail[1])]
+  })
+
+  // fetchThumbnails returns a an array of arrays, where each subarray is a (UUID, thumbnail path) pair.
+  // Display them in a grid, using the UUID as the ID for the image.
   return (
     <div className="grid grid-cols-3 gap-4">
-      {thumbnailFilenames.map((thumbnailFilename) => {
-        const [uuid, filename] = Object.entries(thumbnailFilename)[0]
-        // Join the appDataDirPath with filename using the path module
-        // const imagePath = path.join(appDataDirPath, filename);
-        return (
-          <div key={uuid} className="border border-gray-200 rounded-md p-2">
-            <Image src={String(filename)} alt={uuid} width={200} height={200} />
-          </div>
-        )
-      })}
+      {thumbnailFilepathsConverted.map((thumbnail) => (
+        <img
+          key={thumbnail[0]}
+          src={thumbnail[1]}
+          alt={thumbnail[0]}
+          className="gallery-image"
+        />
+      ))}
     </div>
   )
 }

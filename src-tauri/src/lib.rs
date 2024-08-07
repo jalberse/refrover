@@ -8,5 +8,4 @@ pub mod ann;
 pub mod commands;
 pub mod state;
 mod error;
-mod junk_drawer;
 mod thumbnails;

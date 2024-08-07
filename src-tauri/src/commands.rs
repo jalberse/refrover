@@ -1,12 +1,10 @@
-use std::path::PathBuf;
-
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
 
 use crate::state::ClipState;
-use crate::{db, preprocessing, state::SearchState};
+use crate::thumbnails;
+use crate::{preprocessing, state::SearchState};
 
-use crate::{junk_drawer, schema, thumbnails};
+use rayon::prelude::*; // For par_iter
 
 
 // TODO Note that this currently returns base64 png encodings of the images.
@@ -68,16 +66,14 @@ pub async fn search_images<'a>(
 #[tauri::command]
 pub async fn fetch_thumbnails(file_ids: Vec<String>, app_handle: tauri::AppHandle) -> Result<Vec<(String, String)>, String>
 {
-    let mut connection = db::get_db_connection();
-
-    let mut results = vec![];
-    for file_id in file_ids {
-        let (thumbnail_uuid, thumbnail_filename) = thumbnails::ensure_thumbnail_exists(
-            Uuid::parse_str(&file_id).unwrap(),
-            &app_handle,
-            &mut connection);
-        results.push((thumbnail_uuid.to_string(), thumbnail_filename));
-    }
+    let results = file_ids.par_iter().map(
+        |file_id| {
+            let (thumbnail_uuid, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
+                Uuid::parse_str(&file_id).unwrap(),
+                &app_handle);
+            (thumbnail_uuid.to_string(), thumbnail_filepath)
+        }
+    ).collect();
 
     Ok(results)
 }
