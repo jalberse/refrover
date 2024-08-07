@@ -57,14 +57,16 @@ fn main() {
 
             // Use e.g. `pnpm tauri dev --release -- -- -p` to pass arguments.
             // Multiple `--` are needed to pass arguments to the binary.
-            let mut populate_dummy_data = false;
-            match app.get_cli_matches() {
+            let populate_dummy_data = match app.get_cli_matches() {
                 Ok(matches) => 
                 {
-                    populate_dummy_data = matches.args["populate-dummy-data"].value.as_bool().unwrap();
+                    matches.args["populate-dummy-data"].value.as_bool().unwrap()
                 },
-                Err(_) => todo!(),
-            }
+                Err(_) => 
+                {
+                    false
+                },
+            };
 
             let pool_state = app.state::<ConnectionPoolState>();
 

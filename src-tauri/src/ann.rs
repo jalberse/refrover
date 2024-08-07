@@ -23,7 +23,7 @@ const DEFAULT_EF_C: usize = 400;
 // TODO - Verify that hnsw_rs grows this correctly.
 /// The default max number of elements in the HNSW index on creation.
 /// This can grow/shink dynamically as elements are added/removed.
-const DEFAULT_MAX_ELEMS: usize = 1000;
+const DEFAULT_MAX_ELEMS: usize = 100;
 
 #[derive(Debug, Clone)]
 pub struct HnswElement {
