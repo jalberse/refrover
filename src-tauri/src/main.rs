@@ -15,7 +15,7 @@ use app::state::InnerClipState;
 use app::state::InnerConnectionPoolState;
 use app::state::InnerSearchState;
 use app::state::SearchState;
-use diesel::Connection;
+use tauri::api::cli::Matches;
 use tauri::Manager;
 
 // TODO: How do we want to handle new files that are added to watched dirs?
@@ -55,26 +55,27 @@ fn main() {
             )
         .setup(|app| {
 
+            // Use e.g. `pnpm tauri dev --release -- -- -p` to pass arguments.
+            // Multiple `--` are needed to pass arguments to the binary.
+            let mut populate_dummy_data = false;
+            match app.get_cli_matches() {
+                Ok(matches) => 
+                {
+                    populate_dummy_data = matches.args["populate-dummy-data"].value.as_bool().unwrap();
+                },
+                Err(_) => todo!(),
+            }
+
             let pool_state = app.state::<ConnectionPoolState>();
 
-            db::init(&pool_state);
+            db::init(&pool_state, populate_dummy_data);
 
-            // TODO Initialize our KNN index here, loading it from the DB using a new fn.
-            // Uh, possibly a lazy-initialized hnsw (so it's globally avail)
-            // and then here, load all the feature data and insert.
-            //  Hopefully insertion does not take so long that it's a problem every time we start up?
-            //  Well, maybe we can serialize the HNSW data structure periodically and just load it on launch?
-
-            // TODO I think that we want to enable the r2d2 feature and also
-            //   maintain a connection pool in the app state.
-            //   Then update db::get_db_connection() to use that instead.
-            // https://docs.rs/diesel/latest/diesel/r2d2/index.html
-
-            // TODO Remove this, just doing for now...
+            // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
             tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\vizlib_photos", true).expect("Failed to allow access");
 
+            // We rebuild every time the app launches; it is fast enough, and it handles the fact that
+            // we can't remove elements from the HNSW index.
             ann::populate_hnsw(app);
-            // test_hnsw_with_query(app);
 
             Ok(())
         })

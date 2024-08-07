@@ -11,6 +11,15 @@
     "version": "0.1.0"
   },
   "tauri": {
+    "cli": {
+      "description": "RefRover: Build Your Visual Library",
+      "args": [
+        {
+          "name": "populate-dummy-data",
+          "short": "p"
+        }
+      ]
+    },
     "allowlist": {
       "all": true,
       "protocol": {

@@ -17,7 +17,7 @@ tauri-build = { version = "1.5", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "1.6", features = ["api-all"] }
+tauri = { version = "1.6", features = [ "cli", "api-all"] }
 libsqlite3-sys = { version = "0.28.0", features = [ "bundled" ] }
 diesel = { version = "2.1.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2"] }
 diesel_migrations = "2.1.0"

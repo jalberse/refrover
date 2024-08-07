@@ -65,17 +65,11 @@ pub fn get_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
         .expect("Error creating connection pool")
 }
 
-pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>) {
-    let db_exists = db_file_exists();
-
-    if !db_file_exists() {
-        create_db_file();
-    }
-    
+pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_data: bool) {
     run_migrations(pool_state);
     
     // TODO Remove this eventually, it's just for testing. We will eventually be populating the DB via the UI and calling into more specific functions.
-    if !db_exists {
+    if populate_dummy_data {
         populate_db_dummy_data_tags(pool_state);
         populate_image_features(pool_state);
     }
@@ -88,27 +82,6 @@ pub fn get_db_connection(pool_state: &tauri::State<'_, ConnectionPoolState>) -> 
 fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) {
     let mut connection = get_db_connection(pool_state);
     connection.run_pending_migrations(MIGRATIONS).unwrap();
-}
-
-fn create_db_file() {
-    let db_path = get_db_path();
-    let db_dir = Path::new(&db_path).parent().unwrap();
-
-    if !db_dir.exists() {
-        fs::create_dir_all(db_dir).unwrap();
-    }
-
-    println!("Creating DB file at: {}", db_path);
-
-    fs::File::create(db_path).unwrap();
-}
-
-fn db_file_exists() -> bool {
-    let db_path = get_db_path();
-
-    println!("Checking for DB file at: {}", db_path);
-
-    Path::new(&db_path).exists()
 }
 
 fn get_db_path() -> String {
