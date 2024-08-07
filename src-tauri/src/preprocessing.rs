@@ -1,6 +1,8 @@
 /// Preprocessing functions for input data for the CLIP model.
+/// Do not use these functions for any other purpose (for example,
+/// to load images for purposes other than CLIP encoding).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use ndarray::{Array, Array2, Dim};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -8,11 +10,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 pub const IMAGE_INPUT_SIZE: usize = 336;
 pub const CONTEXT_LENGTH: usize = 77;
 pub const FEATURE_VECTOR_LENGTH: usize = 768;
-
-pub fn load_image(path: &Path) -> Array<f32, Dim<[usize; 4]>>
-{
-	load_image_batch(&[path.to_path_buf()].to_vec())
-}
 
 // TODO This is fallible for image::open(), reflect that and return a result
 // TODO Handle skip;ping unsupported file types?  Related to the above I guess. But I think we want to succesfully load the others, and just maybe warn here?
