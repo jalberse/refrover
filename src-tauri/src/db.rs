@@ -41,15 +41,8 @@ pub fn get_db_connection() -> SqliteConnection {
 }
 
 fn run_migrations() {
-    let mut connection = establish_connection();
+    let mut connection = get_db_connection();
     connection.run_pending_migrations(MIGRATIONS).unwrap();
-}
-
-fn establish_connection() -> SqliteConnection {
-    let db_path = "sqlite://".to_string() + get_db_path().as_str();
-
-    SqliteConnection::establish(&db_path)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", db_path))
 }
 
 fn create_db_file() {
