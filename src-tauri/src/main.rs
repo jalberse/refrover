@@ -10,9 +10,12 @@ use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
 use app::state::ClipState;
+use app::state::ConnectionPoolState;
 use app::state::InnerClipState;
+use app::state::InnerConnectionPoolState;
 use app::state::InnerSearchState;
 use app::state::SearchState;
+use diesel::Connection;
 use tauri::Manager;
 
 // TODO: How do we want to handle new files that are added to watched dirs?
@@ -36,6 +39,11 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())
         .manage(
+            ConnectionPoolState(
+                    Mutex::new(InnerConnectionPoolState { pool: db::get_connection_pool() })
+                )
+        )
+        .manage(
             ClipState(
                     Mutex::new(InnerClipState { clip: Clip::new().unwrap() })
                 )
@@ -46,7 +54,10 @@ fn main() {
                 )
             )
         .setup(|app| {
-            db::init();
+
+            let pool_state = app.state::<ConnectionPoolState>();
+
+            db::init(&pool_state);
 
             // TODO Initialize our KNN index here, loading it from the DB using a new fn.
             // Uh, possibly a lazy-initialized hnsw (so it's globally avail)

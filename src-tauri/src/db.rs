@@ -2,46 +2,91 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 
+use diesel::connection::SimpleConnection;
 use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use ndarray::Array2;
 use uuid::Uuid;
 
 use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewImageFeaturesVitL14336Px, NewTag};
+use crate::state::ConnectionPoolState;
 use crate::{clip, db, preprocessing, schema};
 use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
-pub fn init() {
+const BUSY_TIMEOUT_SECONDS: u64 = 5;
+
+#[derive(Debug)]
+pub struct ConnectionOptions {
+    pub enable_wal: bool,
+    pub enable_foreign_keys: bool,
+    pub busy_timeout: Option<Duration>,
+}
+
+impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
+    for ConnectionOptions
+{
+    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
+        (|| {
+            if self.enable_wal {
+                conn.batch_execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
+            }
+            if self.enable_foreign_keys {
+                conn.batch_execute("PRAGMA foreign_keys = ON;")?;
+            }
+            if let Some(d) = self.busy_timeout {
+                conn.batch_execute(&format!("PRAGMA busy_timeout = {};", d.as_millis()))?;
+            }
+            Ok(())
+        })()
+        .map_err(diesel::r2d2::Error::QueryError)
+    }
+}
+
+pub fn get_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
+    let db_path = get_db_path();
+
+    let manager = ConnectionManager::<SqliteConnection>::new(db_path);
+
+    Pool::builder()
+        .test_on_check_out(true)
+        .connection_customizer(Box::new(ConnectionOptions {
+            enable_wal: true,
+            enable_foreign_keys: true,
+            busy_timeout: Some(Duration::from_secs(BUSY_TIMEOUT_SECONDS)),
+        }))
+        .build(manager)
+        .expect("Error creating connection pool")
+}
+
+pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>) {
     let db_exists = db_file_exists();
 
     if !db_file_exists() {
         create_db_file();
     }
     
-    run_migrations();
+    run_migrations(pool_state);
     
     // TODO Remove this eventually, it's just for testing. We will eventually be populating the DB via the UI and calling into more specific functions.
     if !db_exists {
-        populate_db_dummy_data_tags();
-        populate_image_features();
+        populate_db_dummy_data_tags(pool_state);
+        populate_image_features(pool_state);
     }
 }
 
-pub fn get_db_connection() -> SqliteConnection {
-    // TODO Here, we should instead get it from the AppState's pool of connections.
-    let db_path = get_db_path().clone();
-
-    SqliteConnection::establish(db_path.as_str())
-        .unwrap_or_else(|_| panic!("Error connecting to {}", db_path))
+pub fn get_db_connection(pool_state: &tauri::State<'_, ConnectionPoolState>) -> PooledConnection<ConnectionManager<SqliteConnection>> {
+    pool_state.get_connection()
 }
 
-fn run_migrations() {
-    let mut connection = get_db_connection();
+fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) {
+    let mut connection = get_db_connection(pool_state);
     connection.run_pending_migrations(MIGRATIONS).unwrap();
 }
 
@@ -67,25 +112,17 @@ fn db_file_exists() -> bool {
 }
 
 fn get_db_path() -> String {
-    // TODO I think that this should work fine - I was worried that diesel setup requires
-    // knowing the location of the db, but I think once the  diesel CLI generates stuff in our source,
-    // that won't matter and we don't need to update the env variable to the user's home. Check, though.
+    // TODO Pick a better spot for this, possibly in the app data directory?
     let home_dir = dirs::home_dir().expect("Couldn't find home directory!");
     home_dir.to_str().unwrap().to_string() + "/.config/vizlib/sqlite.vizlib.db"
 }
 
-// TODO Get image features of data in D:\vizlib_photos, add them to the DB.
-//   No need for tags right now.
-//   The BLOB should be the serialized (using serde) version of the feature vector.
-//   I was thinking of serializing a wrapper around the feature vector that has
-//   some versioning, though? But if we truly have two different feature spaces, they
-
-fn populate_db_dummy_data_tags()
+fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState>)
 {
     use crate::schema::{base_directories, file_tags, files, tags};
 
     let base_dir = "D:\\vizlib_photos";
-    let connection = &mut db::get_db_connection();
+    let connection = &mut db::get_db_connection(pool_state);
 
     // TODO - This would be initialized somewhere else. Probably populated when the db file is first created.
     let source_id = Uuid::new_v4();
@@ -278,7 +315,7 @@ fn populate_db_dummy_data_tags()
 //   But in any case, we'd want it to be some asynch task that's going and updating our KNN and table in the background
 //   while users are allowing to continue using the app while that search information is updated for later.
 //  TODO (Also check the system resources while we're doing this to see if we're hitting the GPU and IO stuff)
-fn populate_image_features()
+fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>)
 {
     // Query for all of the filepaths by joining the base_directories and files tables.
 
@@ -289,7 +326,7 @@ fn populate_image_features()
     // Load our CLIP model.
     let clip = clip::Clip::new().unwrap();
 
-    let connection = &mut db::get_db_connection();
+    let connection = &mut db::get_db_connection(pool_state);
 
     let all_files: Vec<(String, String, String)> = base_directories.inner_join(files)
         .select((schema::files::dsl::id, path, relative_path))

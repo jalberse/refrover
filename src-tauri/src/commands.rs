@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::state::ClipState;
+use crate::state::{ClipState, ConnectionPoolState};
 use crate::thumbnails;
 use crate::{preprocessing, state::SearchState};
 
@@ -64,13 +64,15 @@ pub async fn search_images<'a>(
 /// Note that the UUID is *not* the file ID, but the UUID of the thumbnail.
 /// The filename is local to APPDATA.
 #[tauri::command]
-pub async fn fetch_thumbnails(file_ids: Vec<String>, app_handle: tauri::AppHandle) -> Result<Vec<(String, String)>, String>
+pub async fn fetch_thumbnails(file_ids: Vec<String>, app_handle: tauri::AppHandle, pool_state: tauri::State<'_, ConnectionPoolState>) -> Result<Vec<(String, String)>, String>
 {
     let results = file_ids.par_iter().map(
         |file_id| {
             let (thumbnail_uuid, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
                 Uuid::parse_str(&file_id).unwrap(),
-                &app_handle);
+                &app_handle,
+                &pool_state
+            );
             (thumbnail_uuid.to_string(), thumbnail_filepath)
         }
     ).collect();

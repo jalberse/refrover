@@ -6,7 +6,7 @@ use image::{DynamicImage, GenericImageView, ImageBuffer};
 use rayon::prelude::*;
 use uuid::Uuid;
 
-use crate::{db, models::NewThumbnail, queries};
+use crate::{db, models::NewThumbnail, queries, state::ConnectionPoolState};
 
 const MAX_THUMBNAIL_DIMENSION: u32 = 600;
 
@@ -43,14 +43,13 @@ pub fn thumbnail_parallel(
 /// inclusing a file::// prefix for rendering in the browser.
 pub fn ensure_thumbnail_exists(
     file_id: Uuid,
-    app_handle: &tauri::AppHandle
+    app_handle: &tauri::AppHandle,
+    pool_state: &tauri::State<'_, ConnectionPoolState>
 ) -> (Uuid, String)
 {
-    let mut connection = db::get_db_connection();
+    let mut connection = db::get_db_connection(pool_state);
 
     let app_data_path = app_handle.path_resolver().app_data_dir().unwrap();
-
-    println!("App data path: {:?}", app_data_path);
 
     let db_thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection);
 

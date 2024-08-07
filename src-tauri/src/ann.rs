@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 use tauri::{App, Manager};
 use uuid::Uuid;
 
-use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::SearchState};
+use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{ConnectionPoolState, SearchState}};
 
 const DEFAULT_MAX_NB_CONNECTION: usize = 24;
 const DEFAULT_NB_LAYER: usize = 16;
@@ -134,8 +134,9 @@ impl<'a> HnswSearch<'a>
 
 pub fn populate_hnsw(app: &mut App)
 {
-    // TODO This is crashing for some reason?
-    let connection = &mut db::get_db_connection();
+    let pool_state = app.state::<ConnectionPoolState>();
+
+    let connection = &mut db::get_db_connection(&pool_state);
     
     let results = SelectDsl::select(image_features_vit_l_14_336_px::table, ImageFeatureVitL14336Px::as_select())
         .load::<ImageFeatureVitL14336Px>(connection).unwrap();
