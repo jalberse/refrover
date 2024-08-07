@@ -563,5 +563,3 @@ pub fn get_filepath(file_id: Uuid, connection: &mut SqliteConnection) -> Option<
    let rel_path = PathBuf::from(rel_path);
    Some(base_dir.join(rel_path))
 }
-
-// TODO Do a dimilar function, but which takes a set of file_ids and returns a map of file_id to thumbnail data.
