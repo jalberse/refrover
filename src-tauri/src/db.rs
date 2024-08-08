@@ -87,14 +87,14 @@ fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) {
 fn get_db_path() -> String {
     // TODO Pick a better spot for this, possibly in the app data directory?
     let home_dir = dirs::home_dir().expect("Couldn't find home directory!");
-    home_dir.to_str().unwrap().to_string() + "/.config/vizlib/sqlite.vizlib.db"
+    home_dir.to_str().unwrap().to_string() + "/.config/refrover/sqlite.refrover.db"
 }
 
 fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState>)
 {
     use crate::schema::{base_directories, file_tags, files, tags};
 
-    let base_dir = "D:\\vizlib_photos";
+    let base_dir = "D:\\refrover_photos";
     let connection = &mut db::get_db_connection(pool_state);
 
     // TODO - This would be initialized somewhere else. Probably populated when the db file is first created.

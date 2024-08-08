@@ -23,7 +23,23 @@ pub fn load_image_batch(paths: &Vec<PathBuf>) -> Array<f32, Dim<[usize; 4]>>
 	{
 		| path |
 		{
-			image::open(path).unwrap()
+			let img = image::open(path);
+			match img
+			{
+				Ok(img) => img,
+				Err(e) =>
+				{
+					// TODO We'll want proper error handling here; it becomes a bit complex since we assume
+					//   that indices will match from the result of this to the calling code's list of file IDs,
+					//   so we'll actually want to take a vec of some struct that holds the file ID + path, and filter + return that list
+					//   without the ones that error out.
+					//   For dev purposes, I'm just printing the error here so I can test the ONNX functionality is working.
+					//   I have a ticket open for this kind of error handling TODO.
+					//   So we'll end up with some silly blank images in the batch for now which could have some odd feature vectors.
+					println!("Error loading image: {:?} {:?}", path , e);
+					DynamicImage::new_rgb8(IMAGE_INPUT_SIZE as u32, IMAGE_INPUT_SIZE as u32)
+				}
+			}
 		}
 	}).collect::<Vec<DynamicImage>>();
 

@@ -7,7 +7,7 @@
     "distDir": "../out"
   },
   "package": {
-    "productName": "vizlib",
+    "productName": "RefRover",
     "version": "0.1.0"
   },
   "tauri": {
@@ -42,7 +42,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "io.vizlib",
+      "identifier": "io.refrover",
       "longDescription": "",
       "macOS": {
         "entitlements": null,
@@ -70,7 +70,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "VizLib",
+        "title": "RefRover",
         "width": 1280,
         "height": 800
       }

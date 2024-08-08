@@ -75,7 +75,7 @@ fn main() {
             db::init(&pool_state, populate_dummy_data);
 
             // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
-            tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\vizlib_photos", true).expect("Failed to allow access");
+            tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true).expect("Failed to allow access");
 
             // We rebuild every time the app launches; it is fast enough, and it handles the fact that
             // we can't remove elements from the HNSW index.

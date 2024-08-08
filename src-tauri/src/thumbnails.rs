@@ -77,7 +77,7 @@ pub fn ensure_thumbnail_exists(
     let new_thumbnail_filename = format!("{}.webp", new_thumbnail_id);
     let new_thumbnail_full_path = app_data_path.join(&new_thumbnail_filename);
 
-    // TODO This does not handle EXIF rotation. We have a VIZLIB issue open regarding this, image may
+    // TODO This does not handle EXIF rotation. We have a ROVER issue open regarding this, image may
     // get a fix for it very soon as well.
 
     // Create the thumbnail + save it

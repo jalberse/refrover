@@ -31,12 +31,6 @@ impl Clip
 {
     pub fn new() -> Result<Self, ort::Error>
     {
-        // TODO We need to ensure that we are using the CUDA execution provide when available,
-        //   with CPU as a fallback. There's some examples of this online.
-
-        // TODO Add Other execution providers, including CUDA. Add to with_execution_providers() call in order of precedence.
-
-
         // TODO Switch to load-dynamic, possibly
         // TODO Ensure we can load models when shipping executables;
         //    We will ship the ONNX files.
@@ -58,12 +52,10 @@ impl Clip
         //       It's advantageous to split these.
         //   We also definitely want to initiate the session once on startup and keep it around the whole process.
 
-        // TODO It's failing to load the TensorRT execution provider. I think it's because it's not finding the TensorRT libraries.
-        //  It's looking here: \"D:\\projects\\VizLib\\vizlib\\src-tauri\\target\\debug\\onnxruntime_providers_tensorrt.dll
         let visual_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
-            .with_execution_providers([DirectMLExecutionProvider::default().build().error_on_failure()])?
+            .with_execution_providers([DirectMLExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_visual.onnx"))?;
 
         let text_session = ort::Session::builder()?
@@ -134,11 +126,6 @@ impl Clip
     /// times 100.
     pub fn forward(&self, images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<i32>) -> Result<ForwardResults, ort::Error>
     {
-        // TODO For now, we will just run the forward model.
-        //   But we will want to instead mimic CLIP.forward() and use the constituent models,
-        //   and then just get the cosine similarity. This will save space on the disk, since
-        //   the combined ONNX graph is just storing a lot (1.6GB) of redundant data.
-
         let outputs = self.forward_session.run(inputs![
             images,
             tokens
