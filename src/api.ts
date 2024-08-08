@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/tauri"
 
+import type Thumbnail from "./interfaces/thumbnail"
+
 // interface FileMetadata {
 //     filename: string
 //     filepath: string
@@ -48,10 +50,24 @@ export async function fetchThumbnails(queryString: string) {
     console.log("fileUuids", fileUuids)
 
     try {
-      const result = await invoke<Record<string, string>>("fetch_thumbnails", {
-        fileIds: fileUuids,
-      })
-      return result
+      const thumbnailMap = await invoke<Record<string, string>>(
+        "fetch_thumbnails",
+        {
+          fileIds: fileUuids,
+        },
+      )
+
+      // Map the result to a list of Thumbnail objects
+      const thumbnails: Thumbnail[] = Object.entries(thumbnailMap).map(
+        ([, thumb]) => ({
+          uuid: thumb[0],
+          filepath: thumb[1],
+        }),
+      )
+
+      console.log("thumbnails", thumbnails)
+
+      return thumbnails
     } catch (error) {
       console.error("Error fetching thumbnails:", error)
       throw new Error("Failed to fetch thumbnails")

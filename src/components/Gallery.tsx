@@ -1,5 +1,6 @@
 "use client"
 
+import type Thumbnail from "@/interfaces/thumbnail"
 // import Image from "next/image"
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Suspense, useEffect, useState } from "react"
@@ -23,7 +24,7 @@ export const Gallery: React.FC<GalleryProps> = ({
 
 const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   const [thumbnailFilepaths, setThumbnailFilepaths] = useState<
-    Record<string, string>[] | null
+    Thumbnail[] | null
   >(null)
 
   useEffect(() => {
@@ -32,7 +33,7 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
         const result = await fetchThumbnails(search_text)
         console.log(result)
         // Ensure result is an array
-        setThumbnailFilepaths(Array.isArray(result) ? result : [result])
+        setThumbnailFilepaths(result)
       } catch (error) {
         console.error(error)
       }
@@ -48,21 +49,28 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   }
 
   // TODO - Actually, move this into the api. We should do any necessary conversion there. I'm just working on the parallel thumbnail creation for now.
-  const thumbnailFilepathsConverted = thumbnailFilepaths.map((thumbnail) => {
-    return [thumbnail[0], convertFileSrc(thumbnail[1])]
-  })
+  const thumbnailFilepathsConverted: Thumbnail[] = thumbnailFilepaths.map(
+    (thumbnail) => {
+      return {
+        uuid: thumbnail.uuid,
+        filepath: convertFileSrc(thumbnail.filepath),
+      }
+    },
+  )
+
+  // TODO I think this fails if there are fewer than 4 results. We should handle that case.
 
   // fetchThumbnails returns a an array of arrays, where each subarray is a (UUID, thumbnail path) pair.
   // Display them in a grid, using the UUID as the ID for the image.
   // Group thumbnails into columns
   // Group thumbnails into columns
-  const columns: string[][][] = [[], [], [], []]
+  const columns: Thumbnail[][] = [[], [], [], []]
   thumbnailFilepathsConverted.forEach((thumbnail, index) => {
     columns[index % 4].push(thumbnail)
   })
 
   // Use the first element of each thumbnail as the key for the column
-  const columnKeys = columns.map((column) => column[0][0])
+  const columnKeys = columns.map((column) => column[0].uuid)
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -70,10 +78,10 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
         <div key={columnKeys[columnIndex]} className="grid gap-4">
           {column.map((thumbnail) => (
             <GalleryCard
-              key={thumbnail[0]}
-              imageSrc={thumbnail[1]}
+              key={thumbnail.uuid}
+              imageSrc={thumbnail.filepath}
               onClick={() => {
-                console.log(`Clicked on ${thumbnail[0]}`)
+                console.log(`Clicked on ${thumbnail.uuid}`)
               }}
             />
           ))}
