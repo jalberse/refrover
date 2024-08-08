@@ -54,16 +54,27 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
 
   // fetchThumbnails returns a an array of arrays, where each subarray is a (UUID, thumbnail path) pair.
   // Display them in a grid, using the UUID as the ID for the image.
+  // Group thumbnails into columns
+  // Group thumbnails into columns
+  const columns: string[][][] = [[], [], [], []]
+  thumbnailFilepathsConverted.forEach((thumbnail, index) => {
+    columns[index % 4].push(thumbnail)
+  })
+
   return (
-    <div className="grid grid-cols-3 gap-4">
-      {thumbnailFilepathsConverted.map((thumbnail) => (
-        <GalleryCard
-          key={thumbnail[0]}
-          imageSrc={thumbnail[1]}
-          onClick={() => {
-            console.log(`Clicked on ${thumbnail[0]}`)
-          }}
-        />
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {columns.map((column) => (
+        <div key={column[0][0]} className="grid gap-4">
+          {column.map((thumbnail) => (
+            <GalleryCard
+              key={thumbnail[0]}
+              imageSrc={thumbnail[1]}
+              onClick={() => {
+                console.log(`Clicked on ${thumbnail[0]}`)
+              }}
+            />
+          ))}
+        </div>
       ))}
     </div>
   )

@@ -13,12 +13,14 @@ const GalleryCard: React.FC<GalleryCardProps> = ({ imageSrc, onClick }) => {
   }
 
   return (
-    <div
-      className="rounded-lg overflow-hidden shadow-lg cursor-pointer"
-      onClick={onClick}
-      onKeyUp={handleKeyUp}
-    >
-      <img src={imageSrc} alt="Gallery Thumbnail" className="w-full h-auto" />
+    <div onClick={onClick} onKeyUp={handleKeyUp}>
+      <div>
+        <img
+          src={imageSrc}
+          alt="Gallery Thumbnail"
+          className="h-auto max-w-full rounded-lg shadow-md"
+        />
+      </div>
     </div>
   )
 }

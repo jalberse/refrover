@@ -39,11 +39,13 @@ export const Home: React.FC = () => {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="flex flex-1 flex-col items-center justify-center py-8">
-        <div className="flex max-w-3xl flex-wrap items-center justify-center">
+      <div className="flex flex-1 flex-col items-center justify-center">
+        <div className="flex max-w-3xl mx-auto p-4">
           <Search placeholder="Search for reference..." />
         </div>
+      </div>
 
+      <main className="flex flex-1 flex-col items-center justify-center py-8">
         <div className="flex max-w-3xl flex-wrap items-center justify-center">
           <Suspense key={query} fallback={<div>Loading...</div>}>
             <Gallery search_text={query} />
