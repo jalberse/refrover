@@ -4,6 +4,7 @@
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Suspense, useEffect, useState } from "react"
 import { fetchThumbnails } from "../api"
+import GalleryCard from "./GalleryCard"
 
 interface GalleryProps {
   search_text: string
@@ -56,11 +57,12 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   return (
     <div className="grid grid-cols-3 gap-4">
       {thumbnailFilepathsConverted.map((thumbnail) => (
-        <img
+        <GalleryCard
           key={thumbnail[0]}
-          src={thumbnail[1]}
-          alt={thumbnail[0]}
-          className="gallery-image"
+          imageSrc={thumbnail[1]}
+          onClick={() => {
+            console.log(`Clicked on ${thumbnail[0]}`)
+          }}
         />
       ))}
     </div>
