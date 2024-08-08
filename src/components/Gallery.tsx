@@ -43,7 +43,7 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     })
   }, [search_text])
 
-  if (!thumbnailFilepaths) {
+  if (!thumbnailFilepaths || thumbnailFilepaths.length === 0) {
     return null
   }
 
@@ -61,10 +61,13 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     columns[index % 4].push(thumbnail)
   })
 
+  // Use the first element of each thumbnail as the key for the column
+  const columnKeys = columns.map((column) => column[0][0])
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {columns.map((column) => (
-        <div key={column[0][0]} className="grid gap-4">
+      {columns.map((column, columnIndex) => (
+        <div key={columnKeys[columnIndex]} className="grid gap-4">
           {column.map((thumbnail) => (
             <GalleryCard
               key={thumbnail[0]}

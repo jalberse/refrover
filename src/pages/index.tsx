@@ -46,7 +46,7 @@ export const Home: React.FC = () => {
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center py-8">
-        <div className="flex max-w-3xl flex-wrap items-center justify-center">
+        <div className="flex flex-wrap items-center justify-center px-4">
           <Suspense key={query} fallback={<div>Loading...</div>}>
             <Gallery search_text={query} />
           </Suspense>
