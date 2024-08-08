@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
-use ort::{self, inputs, GraphOptimizationLevel, TensorRTExecutionProvider};
+use ort::{self, inputs, GraphOptimizationLevel};
+use ort::DirectMLExecutionProvider;
 
 use crate::preprocessing::FEATURE_VECTOR_LENGTH;
 
@@ -35,6 +36,8 @@ impl Clip
 
         // TODO Add Other execution providers, including CUDA. Add to with_execution_providers() call in order of precedence.
 
+
+        // TODO Switch to load-dynamic, possibly
         // TODO Ensure we can load models when shipping executables;
         //    We will ship the ONNX files.
         // TODO Right now I am using the download strategy (faster) to get the ONNX runtime.
@@ -60,19 +63,19 @@ impl Clip
         let visual_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
-            .with_execution_providers([TensorRTExecutionProvider::default().build()])?
+            .with_execution_providers([DirectMLExecutionProvider::default().build().error_on_failure()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_visual.onnx"))?;
 
         let text_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
-            .with_execution_providers([TensorRTExecutionProvider::default().build()])?
+            .with_execution_providers([DirectMLExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_transformer.onnx"))?;
 
         let forward_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
-            .with_execution_providers([TensorRTExecutionProvider::default().build()])?
+            .with_execution_providers([DirectMLExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px.onnx"))?;
 
         Ok( Clip { visual_session, text_session, forward_session } )

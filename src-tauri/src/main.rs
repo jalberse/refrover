@@ -36,6 +36,8 @@ use tauri::Manager;
 // TODO - 
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())
         .manage(
