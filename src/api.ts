@@ -16,8 +16,7 @@ import type Thumbnail from "./interfaces/thumbnail"
 //     // ...
 // }
 
-// TODO This will actually probably be just for one UUID, as we'll just call it when we inspect
-//      one image.
+// TODO This will actually probably be just for one UUID, as we'll just call it when we inspect one image.
 // Fetches the metadata for the set of files with the given UUIDs.
 // Returns a map from UUID to metadata objects.
 // export async function fetchMetadata(fileUuids: string[]) {
@@ -39,13 +38,9 @@ import type Thumbnail from "./interfaces/thumbnail"
 // We assume the caller knows the directory storing the thumbnails.
 export async function fetchThumbnails(queryString: string) {
   try {
-    const result = await invoke<[string][]>("search_images", {
+    const fileUuids = await invoke<[string][]>("search_images", {
       queryString,
     })
-
-    // The result is a list of file UUIDs.
-    // Fetch the thumbnails for these files.
-    const fileUuids = result.flat()
 
     console.log("fileUuids", fileUuids)
 
