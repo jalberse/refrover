@@ -24,3 +24,18 @@ pub struct FileMetadata
     pub date_accessed: Option<String>,
     // TODO Other metadata fields such as EXIF information from the camera?
 }
+
+#[cfg(test)]
+mod tests 
+{
+    use super::*;
+
+    #[test]
+    fn imghdr_type_serialization()
+    {
+        let image_type = imghdr::Type::Jpeg;
+        let serialized = serde_json::to_string(&image_type).unwrap();
+        let deserialized: imghdr::Type = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(image_type, deserialized);
+    }
+}
