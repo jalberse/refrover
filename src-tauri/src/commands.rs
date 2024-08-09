@@ -1,8 +1,10 @@
 use uuid::Uuid;
 
 use crate::state::{ClipState, ConnectionPoolState};
-use crate::thumbnails;
+use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
+use imghdr;
+use crate::image_metadata::{FileMetadata, ImageSize};
 
 use rayon::prelude::*; // For par_iter
 
@@ -52,10 +54,8 @@ pub async fn search_images<'a>(
     Ok(search_results_uuids)
 }
 
-// TODO Commands to match new API endpoints. Should be relatively simple.
-//   We should grab metadata directly from the filesystem rather than trying to store our own (eventually, we will store both our own metadata and fs ones)
-
-// TODO Metadata command
+// TODO Our Command API can be improved by using structs with names rather than just tuples.
+//      Just need to make sure it's communicating correctly with the front-end, but it's just serde.
 
 /// Fetches the thumbnail filenames for a list of file IDs.
 /// Returns a list of (thumbnail UUID, thumbnail filename) for the files.
@@ -64,7 +64,11 @@ pub async fn search_images<'a>(
 /// Note that the UUID is *not* the file ID, but the UUID of the thumbnail.
 /// The filename is local to APPDATA.
 #[tauri::command]
-pub async fn fetch_thumbnails(file_ids: Vec<String>, app_handle: tauri::AppHandle, pool_state: tauri::State<'_, ConnectionPoolState>) -> Result<Vec<(String, String)>, String>
+pub async fn fetch_thumbnails(
+        file_ids: Vec<String>,
+        app_handle: tauri::AppHandle,
+        pool_state: tauri::State<'_, ConnectionPoolState>
+    ) -> Result<Vec<(String, String)>, String>
 {
     let results = file_ids.par_iter().map(
         |file_id| {
@@ -78,4 +82,81 @@ pub async fn fetch_thumbnails(file_ids: Vec<String>, app_handle: tauri::AppHandl
     ).collect();
 
     Ok(results)
+}
+
+
+/// Fetches the metadata for the given file ID
+/// 
+/// Returns an error if the file is not found.
+/// For most fields, if the metadata is not available or an error occurs while fetching it,
+/// the field will be None, and errors will be silently ignored. For example, trying to determine
+/// the image type on a file that is not an image will fail, so the field will be none - but we
+/// will not return an error, since other metadata may still be available and useful.
+#[tauri::command]
+pub async fn fetch_metadata(
+    file_id: String,
+    pool_state: tauri::State<'_, ConnectionPoolState>
+) -> Result<FileMetadata, String>
+{
+    let uuid = Uuid::parse_str(&file_id).unwrap();
+    let mut connection = db::get_db_connection(&pool_state);
+    let filepath = queries::get_filepath(uuid, &mut connection);
+
+    if filepath.is_none() {
+        // TODO Use thiserror to manage error types https://jonaskruckenberg.github.io/tauri-docs-wip/development/inter-process-communication.html#error-handling
+        return Err("File not found".to_string());
+    }
+    let filepath = filepath.unwrap();
+    
+    let fs_metadata = std::fs::metadata(&filepath);
+    let (date_created, date_modified, date_accessed) = match fs_metadata {
+        Ok(metadata) => {
+            let date_created = metadata.created().ok();
+            let date_modified = metadata.modified().ok();
+            let date_accessed = metadata.accessed().ok();
+            
+            // Convert each to a string using chrono
+            let date_created = match date_created {
+                Some(d) => Some(junk_drawer::system_time_to_string(d)),
+                None => None
+            };
+
+            let date_modified = match date_modified {
+                Some(d) => Some(junk_drawer::system_time_to_string(d)),
+                None => None
+            };
+
+            let date_accessed = match date_accessed {
+                Some(d) => Some(junk_drawer::system_time_to_string(d)),
+                None => None
+            };
+
+            (date_created, date_modified, date_accessed)
+        },
+        Err(_) => (None, None, None)
+    };
+
+    // TODO This can also fail for e.g. bad permissions, also use thiserror for this.
+    let image_type = imghdr::from_file(&filepath).expect("Error determining image type");
+    
+    let dimensions = imagesize::size(&filepath);
+    let dimensions = match dimensions {
+        Ok(dim) => Some(ImageSize { width: dim.width as u32, height: dim.height as u32 }),
+        Err(_) => None
+    };
+    
+    let filename = filepath.file_name().unwrap().to_str().unwrap().to_string();
+    
+    let metadata = FileMetadata
+    {
+        file_id,
+        filename,
+        image_type,
+        size: dimensions,
+        date_created,
+        date_modified,
+        date_accessed,
+    };
+
+    Ok(metadata)
 }
