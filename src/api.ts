@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/tauri"
 
+import { convertFileSrc } from "@tauri-apps/api/tauri"
 import type FileMetadata from "./interfaces/FileMetadata"
 import type FileUuid from "./interfaces/FileUuid"
 import type Thumbnail from "./interfaces/Thumbnail"
@@ -36,9 +37,17 @@ export async function fetchThumbnails(queryString: string) {
         fileIds: fileUuids,
       })
 
-      // TODO We should convert file sources here. convertFileSrc().
+      const thumbnailFilepathsConverted: Thumbnail[] = thumbnails.map(
+        (thumbnail) => {
+          return {
+            uuid: thumbnail.uuid,
+            file_uuid: thumbnail.file_uuid,
+            path: convertFileSrc(thumbnail.path),
+          }
+        },
+      )
 
-      return thumbnails
+      return thumbnailFilepathsConverted
     } catch (error) {
       console.error("Error fetching thumbnails:", error)
       throw new Error("Failed to fetch thumbnails")
