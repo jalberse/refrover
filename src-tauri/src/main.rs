@@ -15,7 +15,6 @@ use app::state::InnerClipState;
 use app::state::InnerConnectionPoolState;
 use app::state::InnerSearchState;
 use app::state::SearchState;
-use tauri::api::cli::Matches;
 use tauri::Manager;
 
 // TODO: How do we want to handle new files that are added to watched dirs?
@@ -32,8 +31,6 @@ use tauri::Manager;
 //    Our FileSystem watcher will use it when it sees new files, and we'll
 //    use it from the frontend when we know we are adding new files via a more
 //    "official" path (like a button in the UI).
-
-// TODO - 
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -86,6 +83,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             app::commands::search_images,
             app::commands::fetch_thumbnails,
+            app::commands::fetch_metadata,
             ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

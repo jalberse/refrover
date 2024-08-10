@@ -550,9 +550,9 @@ pub fn get_filepath(file_id: Uuid, connection: &mut SqliteConnection) -> Option<
    use crate::schema::base_directories;
 
    let paths = files::table
+      .filter(files::id.eq(file_id.to_string()))
       .inner_join(base_directories::table)
       .select((base_directories::path, files::relative_path))
-      .filter(files::id.eq(file_id.to_string()))
       .first(connection)
       .optional()
       .expect("Error loading file path");
@@ -562,4 +562,79 @@ pub fn get_filepath(file_id: Uuid, connection: &mut SqliteConnection) -> Option<
    let base_dir = PathBuf::from(base_dir);
    let rel_path = PathBuf::from(rel_path);
    Some(base_dir.join(rel_path))
+}
+
+#[cfg(test)]
+mod tests
+{
+   use diesel::sqlite::Sqlite;
+   use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+   
+   use crate::{models::NewFile, schema::{base_directories, files}};
+   use super::*;
+
+   // TODO As we are shipping this executable, we will want to actually embed migrations for the whole app,
+   //   not just for the tests. See ROVER-111.
+   pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+   
+   fn establish_connection_in_memory() -> SqliteConnection
+   {
+      let connection = SqliteConnection::establish(":memory:").unwrap();
+      connection
+   }
+
+   fn run_migrations(connection: &mut impl MigrationHarness<Sqlite>) {
+       // This will run the necessary migrations.
+       //
+       // See the documentation for `MigrationHarness` for
+       // all available methods.
+       connection.run_pending_migrations(MIGRATIONS).expect("Error running migrations in test");
+   }
+
+   fn setup() -> SqliteConnection
+   {
+      let mut connection = establish_connection_in_memory();
+      run_migrations(&mut connection);
+      connection
+   }
+
+   #[test]
+   fn test_get_filepath()
+   {
+      let mut connection = setup();
+
+      let file_id = Uuid::new_v4();
+      let base_directory_id = Uuid::new_v4();
+      let relative_path = "test.jpg";
+      let base_directory = "D:\\test";
+
+      // Insert into the base directories table
+      let new_base_directory = crate::models::NewBaseDirectory {
+         id: &base_directory_id.to_string(),
+         path: base_directory,
+      };
+
+      diesel::insert_into(base_directories::table)
+         .values(new_base_directory)
+         .execute(&mut connection)
+         .expect("Error inserting base directory");
+
+      // Insert into the files table. Note this must be done second to avoid a FK constraint violation.
+      let new_file = NewFile {
+         id: &file_id.to_string(),
+         base_directory_id: &base_directory_id.to_string(),
+         relative_path
+      };
+
+      diesel::insert_into(files::table)
+         .values(new_file)
+         .execute(&mut connection)
+         .expect("Error inserting file");
+
+      // Get the file path using the query we're actually testing
+      let file_path = get_filepath(file_id, &mut connection).expect("Error getting file path");
+      let expected = PathBuf::from(base_directory).join(relative_path);
+      assert_eq!(file_path, expected);
+   }
+
 }

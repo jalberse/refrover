@@ -5,6 +5,7 @@ import type Thumbnail from "@/interfaces/thumbnail"
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Suspense, useEffect, useState } from "react"
 import { fetchThumbnails } from "../api"
+import { fetchMetadata } from "../api"
 import GalleryCard from "./GalleryCard"
 
 interface GalleryProps {
@@ -58,8 +59,6 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     },
   )
 
-  // TODO I think this fails if there are fewer than 4 results. We should handle that case.
-
   // fetchThumbnails returns a an array of arrays, where each subarray is a (UUID, thumbnail path) pair.
   // Display them in a grid, using the UUID as the ID for the image.
   // Group thumbnails into columns
@@ -81,7 +80,7 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
               key={thumbnail.uuid}
               imageSrc={thumbnail.filepath}
               onClick={() => {
-                console.log(`Clicked on ${thumbnail.uuid}`)
+                console.log(fetchMetadata(thumbnail.uuid))
               }}
             />
           ))}

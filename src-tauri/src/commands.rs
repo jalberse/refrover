@@ -4,7 +4,7 @@ use crate::state::{ClipState, ConnectionPoolState};
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
 use imghdr;
-use crate::image_metadata::{FileMetadata, ImageSize};
+use crate::metadata::{FileMetadata, ImageSize};
 
 use rayon::prelude::*; // For par_iter
 
@@ -81,6 +81,8 @@ pub async fn fetch_thumbnails(
         }
     ).collect();
 
+    println!("Returning thumbnails: {:?}", results);
+
     Ok(results)
 }
 
@@ -100,6 +102,10 @@ pub async fn fetch_metadata(
 {
     let uuid = Uuid::parse_str(&file_id).unwrap();
     let mut connection = db::get_db_connection(&pool_state);
+    // TODO - Fix this dumb mistake. We were using the Thumbnail UUID, not the file UUID, and passing that to the fetchMetadata API.
+    //   Maybe fetch_thumbnails should instead be a more broad "fetch search results" API that returns returns the file IDs, thumbnail IDs, and thumbnail filepaths.
+    //        Then the file ID can be used to fetch metadata when one of the GalleryCard components is clicked - each GalleryCard can know its own file ID.
+    println!("Fetching metadata for file ID: {}", uuid);
     let filepath = queries::get_filepath(uuid, &mut connection);
 
     if filepath.is_none() {

@@ -1,35 +1,25 @@
 import { invoke } from "@tauri-apps/api/tauri"
 
+import type FileMetadata from "./interfaces/FileMetadata"
 import type Thumbnail from "./interfaces/thumbnail"
 
-// interface FileMetadata {
-//     filename: string
-//     filepath: string
-//     dateCreated: string
-//     dateModified: string
-//     dimensions: {
-//         width: number
-//         height: number
-//     }
-//     // TODO Pick units intentionally. I think we can do bytes and display as needed. Ensure Rust returned matches.
-//     fileSize: number
-//     // ...
-// }
+// TODO Ensure we're using proper interfaces for e.g. File UUIDs.
+//      I'm in a bad habit of using strings for everything on the frontend.
 
-// TODO This will actually probably be just for one UUID, as we'll just call it when we inspect one image.
-// Fetches the metadata for the set of files with the given UUIDs.
-// Returns a map from UUID to metadata objects.
-// export async function fetchMetadata(fileUuids: string[]) {
-//     try {
-//         // Returns a map from UUID to metadata objects.
-//         const result = await invoke<Record<string, FileMetadata>>("fetch_metadata", {
-//             fileUuids,
-//         })
-//         return result
-//     } catch (error) {
-//         throw new Error("Failed to fetch metadata")
-//     }
-// }
+export async function fetchMetadata(fileUuid: string) {
+  try {
+    // Invoke the Tauri API to fetch the metadata for the given file UUID
+    // The return value is a FileMetadata object serialized as JSON.
+    const result = await invoke<string>("fetch_metadata", {
+      fileId: fileUuid,
+    })
+    // Parse the JSON string into a FileMetadata object
+    const metadata: FileMetadata = JSON.parse(result) as FileMetadata
+    return metadata
+  } catch (error) {
+    console.log("Error fetching metadata:", error)
+  }
+}
 
 // Fetches the thumbnails for the set of files with the given UUIDs.
 // If no thumbnail is available, it will be generated.
