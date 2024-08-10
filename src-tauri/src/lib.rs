@@ -9,5 +9,5 @@ pub mod commands;
 pub mod state;
 mod error;
 mod thumbnails;
-mod metadata;
 mod junk_drawer;
+mod interface;

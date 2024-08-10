@@ -1,6 +1,7 @@
 interface Thumbnail {
   uuid: string
-  filepath: string
+  file_uuid: string
+  path: string
 }
 
 export default Thumbnail

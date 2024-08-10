@@ -18,7 +18,6 @@ pub fn load_image_batch(paths: &Vec<PathBuf>) -> Array<f32, Dim<[usize; 4]>>
 	let mut image_input = Array::zeros((paths.len(), 3, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE));
 
 	// Load the images in parallel
-	println!("Loading images...");
 	let images:  Vec<DynamicImage> = paths.par_iter().map(
 	{
 		| path |
@@ -44,7 +43,6 @@ pub fn load_image_batch(paths: &Vec<PathBuf>) -> Array<f32, Dim<[usize; 4]>>
 	}).collect::<Vec<DynamicImage>>();
 
 	// Resize the images in parallel
-	println!("Resizing images...");
 	let resized_images = images.par_iter().map(
 	{
 		|original_img|
@@ -55,7 +53,6 @@ pub fn load_image_batch(paths: &Vec<PathBuf>) -> Array<f32, Dim<[usize; 4]>>
 	}).collect::<Vec<DynamicImage>>();
 
 	// Convert the images to arrays in parallel
-	println!("Converting images to arrays...");
 	for (idx, img) in resized_images.iter().enumerate()
 	{
 		for pixel in img.pixels() {
@@ -68,7 +65,6 @@ pub fn load_image_batch(paths: &Vec<PathBuf>) -> Array<f32, Dim<[usize; 4]>>
 		}
 	}
 
-	print!("Done pre-processing image batch.");
     image_input
 }
 

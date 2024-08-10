@@ -1,7 +1,6 @@
 "use client"
 
-import type Thumbnail from "@/interfaces/thumbnail"
-// import Image from "next/image"
+import type Thumbnail from "@/interfaces/Thumbnail"
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Suspense, useEffect, useState } from "react"
 import { fetchThumbnails } from "../api"
@@ -24,17 +23,13 @@ export const Gallery: React.FC<GalleryProps> = ({
 }
 
 const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
-  const [thumbnailFilepaths, setThumbnailFilepaths] = useState<
-    Thumbnail[] | null
-  >(null)
+  const [thumbnails, setThumbnails] = useState<Thumbnail[] | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const result = await fetchThumbnails(search_text)
-        console.log(result)
-        // Ensure result is an array
-        setThumbnailFilepaths(result)
+        setThumbnails(result)
       } catch (error) {
         console.error(error)
       }
@@ -45,16 +40,17 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     })
   }, [search_text])
 
-  if (!thumbnailFilepaths || thumbnailFilepaths.length === 0) {
+  if (!thumbnails || thumbnails.length === 0) {
     return null
   }
 
-  // TODO - Actually, move this into the api. We should do any necessary conversion there. I'm just working on the parallel thumbnail creation for now.
-  const thumbnailFilepathsConverted: Thumbnail[] = thumbnailFilepaths.map(
+  // TODO This conversion should be in the API fn instead.
+  const thumbnailFilepathsConverted: Thumbnail[] = thumbnails.map(
     (thumbnail) => {
       return {
         uuid: thumbnail.uuid,
-        filepath: convertFileSrc(thumbnail.filepath),
+        file_uuid: thumbnail.file_uuid,
+        path: convertFileSrc(thumbnail.path),
       }
     },
   )
@@ -78,9 +74,9 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
           {column.map((thumbnail) => (
             <GalleryCard
               key={thumbnail.uuid}
-              imageSrc={thumbnail.filepath}
+              imageSrc={thumbnail.path}
               onClick={() => {
-                console.log(fetchMetadata(thumbnail.uuid))
+                console.log(fetchMetadata(thumbnail.file_uuid))
               }}
             />
           ))}

@@ -1,3 +1,4 @@
+// TODO Ensure that the field names match too.
 // Should be kept in synch with the Rust FileMetadata struct.
 interface FileMetadata {
   filename: string

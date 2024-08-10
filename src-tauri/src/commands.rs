@@ -4,7 +4,7 @@ use crate::state::{ClipState, ConnectionPoolState};
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
 use imghdr;
-use crate::metadata::{FileMetadata, ImageSize};
+use crate::interface::{FileMetadata, FileUuid, ImageSize, Thumbnail, ThumbnailUuid};
 
 use rayon::prelude::*; // For par_iter
 
@@ -30,7 +30,7 @@ pub async fn search_images<'a>(
         query_string: &str,
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
-    ) -> Result<Vec<String>, String>
+    ) -> Result<Vec<FileUuid>, String>
 {
     if query_string.is_empty() {
         return Ok(vec![]);
@@ -49,13 +49,10 @@ pub async fn search_images<'a>(
 
     let search_results = hnsw.search(query_vector_slice, 10, 400);
 
-    let search_results_uuids: Vec<String> = search_results.iter().map(|x| x.0.to_string()).collect();
+    let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 
     Ok(search_results_uuids)
 }
-
-// TODO Our Command API can be improved by using structs with names rather than just tuples.
-//      Just need to make sure it's communicating correctly with the front-end, but it's just serde.
 
 /// Fetches the thumbnail filenames for a list of file IDs.
 /// Returns a list of (thumbnail UUID, thumbnail filename) for the files.
@@ -68,7 +65,7 @@ pub async fn fetch_thumbnails(
         file_ids: Vec<String>,
         app_handle: tauri::AppHandle,
         pool_state: tauri::State<'_, ConnectionPoolState>
-    ) -> Result<Vec<(String, String)>, String>
+    ) -> Result<Vec<Thumbnail>, String>
 {
     let results = file_ids.par_iter().map(
         |file_id| {
@@ -77,11 +74,14 @@ pub async fn fetch_thumbnails(
                 &app_handle,
                 &pool_state
             );
-            (thumbnail_uuid.to_string(), thumbnail_filepath)
+            Thumbnail
+            {
+                uuid: ThumbnailUuid(thumbnail_uuid.to_string()),
+                file_uuid: FileUuid(file_id.to_string()),
+                path: thumbnail_filepath,
+            }
         }
     ).collect();
-
-    println!("Returning thumbnails: {:?}", results);
 
     Ok(results)
 }
@@ -102,10 +102,7 @@ pub async fn fetch_metadata(
 {
     let uuid = Uuid::parse_str(&file_id).unwrap();
     let mut connection = db::get_db_connection(&pool_state);
-    // TODO - Fix this dumb mistake. We were using the Thumbnail UUID, not the file UUID, and passing that to the fetchMetadata API.
-    //   Maybe fetch_thumbnails should instead be a more broad "fetch search results" API that returns returns the file IDs, thumbnail IDs, and thumbnail filepaths.
-    //        Then the file ID can be used to fetch metadata when one of the GalleryCard components is clicked - each GalleryCard can know its own file ID.
-    println!("Fetching metadata for file ID: {}", uuid);
+
     let filepath = queries::get_filepath(uuid, &mut connection);
 
     if filepath.is_none() {

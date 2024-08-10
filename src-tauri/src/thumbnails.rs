@@ -23,16 +23,6 @@ pub fn thumbnail(
     image::imageops::thumbnail(orig_image, new_width, new_height)
 }
 
-pub fn thumbnail_parallel(
-    orig_images: &Vec<DynamicImage>,
-) -> Vec<ImageBuffer<image::Rgba<u8>, Vec<u8>>>
-{
-    orig_images
-        .par_iter()
-        .map(|img| thumbnail(img))
-        .collect()
-}
-
 /// Ensures a thumbnail exists for the given image.
 /// If a thumbnail already exists, it is returned.
 /// If an entry for the thumbnail exists in the database but not on disk, the old
@@ -79,6 +69,7 @@ pub fn ensure_thumbnail_exists(
 
     // TODO This does not handle EXIF rotation. We have a ROVER issue open regarding this, image may
     // get a fix for it very soon as well.
+    // Though rather than waiting, this might be sufficient: https://docs.rs/kamadak-exif/latest/exif/
 
     // Create the thumbnail + save it
     let file_path = queries::get_filepath(file_id, &mut connection).unwrap();

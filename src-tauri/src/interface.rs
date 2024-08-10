@@ -1,4 +1,23 @@
+/// This module contains structs that are returned by the various Tauri commands.
+/// They are serialized as JSON objects to be received by the front-end in api.tsx.
+/// Their definitions should be kept in sync with the front-end's interfaces/ module types.
+/// That INCLUDES the names of the various fields, which become the JSON keys.
+
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct Thumbnail
+{
+    pub uuid: ThumbnailUuid,
+    pub file_uuid: FileUuid,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ThumbnailUuid(pub String);
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct FileUuid(pub String);
 
 /// The size of an image, in pixels.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -51,7 +70,6 @@ mod tests
             date_accessed: Some("2021-01-03".to_string()),
         };
         let serialized = serde_json::to_string(&metadata).unwrap();
-        println!("{}", serialized);
         let deserialized: FileMetadata = serde_json::from_str(&serialized).unwrap();
         assert_eq!(metadata, deserialized);
     }
