@@ -28,7 +28,7 @@ export const Home: React.FC = () => {
   const isDetailsViewOpen = detailsViewFileUuid !== ""
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex flex-col bg-white">
       <Head>
         <title>RefRover: Build Your Visual Library</title>
         <meta name="RefRover" content="Reference Rover" />
@@ -44,15 +44,15 @@ export const Home: React.FC = () => {
       <main className="flex flex-1 flex-col items-center justify-center py-8">
         <PanelGroup autoSaveId="persistence conditional" direction="horizontal">
           <Panel>
-            <div style={{ overflow: "auto" }}>
+            <div style={{ overflow: "auto", padding: "8px" }}>
               <Gallery search_text={query} />
             </div>
           </Panel>
           <PanelResizeHandle />
           {isDetailsViewOpen && (
             <>
-              <Panel>
-                <div style={{ overflow: "auto" }}>
+              <Panel className="border-l-2 border-light-grey-900">
+                <div style={{ overflow: "auto", padding: "8px" }}>
                   <AssetDetails />
                 </div>
               </Panel>

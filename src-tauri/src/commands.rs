@@ -97,6 +97,7 @@ pub async fn fetch_thumbnails(
 #[tauri::command]
 pub async fn fetch_metadata(
     file_id: String,
+    app_handle: tauri::AppHandle,
     pool_state: tauri::State<'_, ConnectionPoolState>
 ) -> Result<FileMetadata, String>
 {
@@ -111,6 +112,13 @@ pub async fn fetch_metadata(
     }
     let filepath = filepath.unwrap();
     
+    // Get the thumbnail filepath - the thumbnail should typically exist by this point, but we ensure it here.
+    let (_, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
+        Uuid::parse_str(&file_id).unwrap(),
+        &app_handle,
+        &pool_state
+    );
+
     let fs_metadata = std::fs::metadata(&filepath);
     let (date_created, date_modified) = match fs_metadata {
         Ok(metadata) => {
@@ -148,6 +156,7 @@ pub async fn fetch_metadata(
     {
         file_id,
         filename,
+        thumbnail_filepath,
         image_type,
         size: dimensions,
         date_created,

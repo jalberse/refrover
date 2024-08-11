@@ -34,6 +34,7 @@ pub struct FileMetadata
 {
     pub file_id: String,
     pub filename: String,
+    pub thumbnail_filepath: String,
     pub image_type: Option<imghdr::Type>,
     pub size: Option<ImageSize>,
     pub date_created: Option<String>,
@@ -62,6 +63,7 @@ mod tests
         {
             file_id: "1234".to_string(),
             filename: "test.jpg".to_string(),
+            thumbnail_filepath: "/path/to/test.jpg".to_string(),
             image_type: Some(imghdr::Type::Jpeg),
             size: Some(ImageSize { width: 1920, height: 1080 }),
             date_created: Some("2021-01-01".to_string()),

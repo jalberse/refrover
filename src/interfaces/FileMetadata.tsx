@@ -2,6 +2,7 @@
 interface FileMetadata {
   file_id: string
   filename: string
+  thumbnail_filepath: string
   image_type: string | null
   size: {
     width: number

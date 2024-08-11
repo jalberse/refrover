@@ -15,6 +15,10 @@ export async function fetchMetadata(fileUuid: string) {
     const result = await invoke<FileMetadata>("fetch_metadata", {
       fileId: fileUuid,
     })
+
+    // Convert the thumbnail file path to a file URL
+    result.thumbnail_filepath = convertFileSrc(result.thumbnail_filepath)
+
     return result
   } catch (error) {
     console.log("Error fetching metadata:", error)
