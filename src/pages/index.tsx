@@ -1,6 +1,7 @@
 import AssetDetails from "@/components/AssetDetails"
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
+import useRoverStore from "@/hooks/store"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import Head from "next/head"
 import Image from "next/image"
@@ -32,6 +33,11 @@ export const Home: React.FC = () => {
 
   // TODO Want the tag hierarchy stuff on a left panel. Do that.
 
+  const detailsViewFileUuid = useRoverStore(
+    (state) => state.detailsViewFileUuid,
+  )
+  const isDetailsViewOpen = detailsViewFileUuid !== ""
+
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <Head>
@@ -47,18 +53,22 @@ export const Home: React.FC = () => {
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center py-8">
-        <PanelGroup autoSaveId="persistence" direction="horizontal">
+        <PanelGroup autoSaveId="persistence conditional" direction="horizontal">
           <Panel>
             <div style={{ overflow: "auto" }}>
               <Gallery search_text={query} />
             </div>
           </Panel>
           <PanelResizeHandle />
-          <Panel>
-            <div style={{ overflow: "auto" }}>
-              <AssetDetails />
-            </div>
-          </Panel>
+          {isDetailsViewOpen && (
+            <>
+              <Panel>
+                <div style={{ overflow: "auto" }}>
+                  <AssetDetails />
+                </div>
+              </Panel>
+            </>
+          )}
         </PanelGroup>
       </main>
 
