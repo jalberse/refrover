@@ -38,7 +38,6 @@ pub struct FileMetadata
     pub size: Option<ImageSize>,
     pub date_created: Option<String>,
     pub date_modified: Option<String>,
-    pub date_accessed: Option<String>,
     // TODO Other metadata fields such as EXIF information from the camera?
 }
 
@@ -67,7 +66,6 @@ mod tests
             size: Some(ImageSize { width: 1920, height: 1080 }),
             date_created: Some("2021-01-01".to_string()),
             date_modified: Some("2021-01-02".to_string()),
-            date_accessed: Some("2021-01-03".to_string()),
         };
         let serialized = serde_json::to_string(&metadata).unwrap();
         let deserialized: FileMetadata = serde_json::from_str(&serialized).unwrap();

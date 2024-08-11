@@ -36,11 +36,6 @@ const AssetDetails: React.FC = () => {
     return null
   }
 
-  // TODO We *do* see some slight lag on updating these values.
-  //      We may want to wrap AssetDetails in a Suspense boundary.
-  //      But, that interferes with the resizable panels, so we'd
-  //      need a solution.
-
   // TODO Additionally display the thumbnail image here.
   return (
     <div className="flex justify-center">
@@ -74,12 +69,6 @@ const AssetDetails: React.FC = () => {
             <tr>
               <th className="text-right pr-4">Modified:</th>
               <td>{fileMetadata.date_modified}</td>
-            </tr>
-          )}
-          {fileMetadata.date_accessed && (
-            <tr>
-              <th className="text-right pr-4">Accessed:</th>
-              <td>{fileMetadata.date_accessed}</td>
             </tr>
           )}
         </tbody>

@@ -112,11 +112,10 @@ pub async fn fetch_metadata(
     let filepath = filepath.unwrap();
     
     let fs_metadata = std::fs::metadata(&filepath);
-    let (date_created, date_modified, date_accessed) = match fs_metadata {
+    let (date_created, date_modified) = match fs_metadata {
         Ok(metadata) => {
             let date_created = metadata.created().ok();
             let date_modified = metadata.modified().ok();
-            let date_accessed = metadata.accessed().ok();
             
             // Convert each to a string using chrono
             let date_created = match date_created {
@@ -129,14 +128,9 @@ pub async fn fetch_metadata(
                 None => None
             };
 
-            let date_accessed = match date_accessed {
-                Some(d) => Some(junk_drawer::system_time_to_string(d)),
-                None => None
-            };
-
-            (date_created, date_modified, date_accessed)
+            (date_created, date_modified)
         },
-        Err(_) => (None, None, None)
+        Err(_) => (None, None)
     };
 
     // TODO This can also fail for e.g. bad permissions, also use thiserror for this.
@@ -158,7 +152,6 @@ pub async fn fetch_metadata(
         size: dimensions,
         date_created,
         date_modified,
-        date_accessed,
     };
 
     Ok(metadata)

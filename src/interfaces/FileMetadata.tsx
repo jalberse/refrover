@@ -1,5 +1,3 @@
-// TODO This doesn't match the Rust struct lol. We are obviously returning the Rust bit.
-
 // Should be kept in synch with the Rust FileMetadata struct.
 interface FileMetadata {
   file_id: string
@@ -11,7 +9,6 @@ interface FileMetadata {
   } | null
   date_created: string | null
   date_modified: string | null
-  date_accessed: string | null
 }
 
 export default FileMetadata
