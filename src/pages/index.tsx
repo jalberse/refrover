@@ -10,28 +10,17 @@ import { useCallback } from "react"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
 export const Home: React.FC = () => {
-  // TODO I think there is a nicer way to do this since a Page should by
-  // optionally accept the search params, but I couldn't figure it out.
-  // That would be more type-safe, but this is fine for now.
-
   const searchParams = useSearchParams()
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const query = searchParams.get("query") ?? ""
 
-  // TODO Delete this lol.
+  const clearDetailsViewFileUuid = useRoverStore(
+    (state) => state.clearDetailsViewFileUuid,
+  )
+
   const shortcutHandler = useCallback(() => {
-    console.log("Ctrl+P was pressed!")
-  }, [])
-  useGlobalShortcut("CommandOrControl+P", shortcutHandler)
-
-  // TODO So this page will have two components: Search and AssetTable.
-  //    Uh, do those.
-  // TODO Then AssetTable will display AssetCards via pagination.
-  //    The content of the cards will be determined by passing the query
-  //    (which is passed to the asset table, along with the page number)
-  //    to the AssetTable, which will then call the query to construct the table.
-
-  // TODO Want the tag hierarchy stuff on a left panel. Do that.
+    clearDetailsViewFileUuid()
+  }, [clearDetailsViewFileUuid])
+  useGlobalShortcut("Esc", shortcutHandler)
 
   const detailsViewFileUuid = useRoverStore(
     (state) => state.detailsViewFileUuid,

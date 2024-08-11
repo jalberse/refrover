@@ -1,16 +1,17 @@
-// TODO Ensure that the field names match too.
+// TODO This doesn't match the Rust struct lol. We are obviously returning the Rust bit.
+
 // Should be kept in synch with the Rust FileMetadata struct.
 interface FileMetadata {
+  file_id: string
   filename: string
-  filepath: string
-  dateCreated: string
-  dateModified: string
-  dimensions: {
+  image_type: string | null
+  size: {
     width: number
     height: number
-  }
-  fileSize: number
-  // ...
+  } | null
+  date_created: string | null
+  date_modified: string | null
+  date_accessed: string | null
 }
 
 export default FileMetadata
