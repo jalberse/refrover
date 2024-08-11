@@ -1,9 +1,9 @@
 "use client"
 
+import useRoverStore from "@/hooks/store"
 import type Thumbnail from "@/interfaces/Thumbnail"
 import { Suspense, useEffect, useState } from "react"
 import { fetchThumbnails } from "../api"
-import { fetchMetadata } from "../api"
 import GalleryCard from "./GalleryCard"
 
 interface GalleryProps {
@@ -23,6 +23,9 @@ export const Gallery: React.FC<GalleryProps> = ({
 
 const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   const [thumbnails, setThumbnails] = useState<Thumbnail[] | null>(null)
+  const setDetailsViewFileUuid = useRoverStore(
+    (state) => state.setDetailsViewFileUuid,
+  )
 
   useEffect(() => {
     const fetchData = async () => {
@@ -51,8 +54,9 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   // Use the first element of each thumbnail as the key for the column
   const columnKeys = columns.map((column) => column[0].uuid)
 
-  // TODO Next step is, instead of just logging metadata, display in a new component.
-  //      AssetDetails or something.
+  // TODO Additionally, perhaps pressing escape should clear that state so that we remove the details component.
+  //      I had a ctrl + P example for doing shortcuts/button inputs like that somewhere.
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {columns.map((column, columnIndex) => (
@@ -62,7 +66,7 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
               key={thumbnail.uuid}
               imageSrc={thumbnail.path}
               onClick={() => {
-                console.log(fetchMetadata(thumbnail.file_uuid))
+                setDetailsViewFileUuid(thumbnail.file_uuid)
               }}
             />
           ))}

@@ -1,3 +1,4 @@
+import AssetDetails from "@/components/AssetDetails"
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
@@ -50,6 +51,7 @@ export const Home: React.FC = () => {
           <Suspense key={query} fallback={<div>Loading...</div>}>
             <Gallery search_text={query} />
           </Suspense>
+          <AssetDetails />
         </div>
       </main>
 
