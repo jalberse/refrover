@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{ConnectionPoolState, SearchState}};
 
-const DEFAULT_MAX_NB_CONNECTION: usize = 24;
+const DEFAULT_MAX_NB_CONNECTION: usize = 100;
 const DEFAULT_NB_LAYER: usize = 16;
 const DEFAULT_EF_C: usize = 400;
 const DEFAULT_MAX_ELEMS: usize = 10000;

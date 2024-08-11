@@ -47,7 +47,8 @@ pub async fn search_images<'a>(
 
     let query_vector_slice = query_vector.as_slice().unwrap();
 
-    let search_results = hnsw.search(query_vector_slice, 10, 400);
+    // TODO We will want to make sure ef_arg is optimized.
+    let search_results = hnsw.search(query_vector_slice, 50, 400);
 
     let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 
