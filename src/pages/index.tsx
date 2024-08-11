@@ -6,7 +6,7 @@ import Head from "next/head"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import { useCallback } from "react"
-import { Suspense } from "react"
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
 export const Home: React.FC = () => {
   // TODO I think there is a nicer way to do this since a Page should by
@@ -47,12 +47,19 @@ export const Home: React.FC = () => {
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center py-8">
-        <div className="flex flex-wrap items-center justify-center px-4">
-          <Suspense key={query} fallback={<div>Loading...</div>}>
-            <Gallery search_text={query} />
-          </Suspense>
-          <AssetDetails />
-        </div>
+        <PanelGroup autoSaveId="persistence" direction="horizontal">
+          <Panel>
+            <div style={{ overflow: "auto" }}>
+              <Gallery search_text={query} />
+            </div>
+          </Panel>
+          <PanelResizeHandle />
+          <Panel>
+            <div style={{ overflow: "auto" }}>
+              <AssetDetails />
+            </div>
+          </Panel>
+        </PanelGroup>
       </main>
 
       <footer className="flex flex-1 flex-grow-0 items-center justify-center border-t border-gray-200 py-4">

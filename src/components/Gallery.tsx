@@ -2,7 +2,7 @@
 
 import useRoverStore from "@/hooks/store"
 import type Thumbnail from "@/interfaces/Thumbnail"
-import { Suspense, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { fetchThumbnails } from "../api"
 import GalleryCard from "./GalleryCard"
 
@@ -13,12 +13,7 @@ interface GalleryProps {
 export const Gallery: React.FC<GalleryProps> = ({
   search_text,
 }: GalleryProps) => {
-  // TODO Use a skeleton instead of "Loading..."
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <GalleryContent search_text={search_text} />
-    </Suspense>
-  )
+  return <GalleryContent search_text={search_text} />
 }
 
 const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
