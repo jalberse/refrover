@@ -39,35 +39,41 @@ export const Home: React.FC = () => {
       </Head>
 
       <main
-        className="flex-1 items-center justify-center "
+        className="items-center justify-center "
         style={{ height: "100vh" }}
       >
-        <div className="items-center justify-center">
-          <div className="flex max-w-3xl mx-auto p-4">
-            <Search placeholder="Search for reference..." />
-          </div>
-        </div>
-
-        <PanelGroup
-          className="flex-1"
-          autoSaveId="persistence conditional"
-          direction="horizontal"
-        >
-          <Panel>
-            <div className="flex-1 overflow-auto p-8 h-full">
-              <Gallery search_text={query} />
+        <PanelGroup direction="vertical">
+          <Panel defaultSize={9}>
+            <div className="flex max-w-3xl mx-auto p-4">
+              <Search placeholder="Search for reference..." />
             </div>
           </Panel>
-          <PanelResizeHandle />
-          {isDetailsViewOpen && (
-            <>
-              <Panel className="flex-1 border-l-2 border-light-grey-900">
-                <div className="overflow-auto p-8 h-full">
-                  <AssetDetails />
+          <Panel>
+            <PanelGroup
+              className="flex-1"
+              autoSaveId="persistence conditional"
+              direction="horizontal"
+            >
+              <Panel>
+                <div className="flex-1 overflow-auto p-4 h-full">
+                  <Gallery search_text={query} />
                 </div>
               </Panel>
-            </>
-          )}
+              <PanelResizeHandle />
+              {isDetailsViewOpen && (
+                <>
+                  <Panel
+                    defaultSize={25}
+                    className="flex-1 border-l-2 border-light-grey-900"
+                  >
+                    <div className="overflow-auto p-4 h-full">
+                      <AssetDetails />
+                    </div>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          </Panel>
         </PanelGroup>
       </main>
 
