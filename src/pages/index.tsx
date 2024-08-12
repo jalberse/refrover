@@ -31,7 +31,7 @@ export const Home: React.FC = () => {
   //      We just want to scroll vertically within the gallery, or the detail pain if it's squished.
 
   return (
-    <div className="flex flex-col bg-white" style={{ height: "100vh" }}>
+    <div className="flex flex-col bg-white">
       <Head>
         <title>RefRover: Build Your Visual Library</title>
         <meta name="RefRover" content="Reference Rover" />
@@ -39,41 +39,36 @@ export const Home: React.FC = () => {
       </Head>
 
       <main
-        className="items-center justify-center "
+        className="items-center justify-center h-full"
         style={{ height: "100vh" }}
       >
-        <PanelGroup direction="vertical">
-          <Panel defaultSize={9}>
-            <div className="flex max-w-3xl mx-auto p-4">
-              <Search placeholder="Search for reference..." />
+        <div className="flex max-w-3xl mx-auto p-4 h-1/10">
+          <Search placeholder="Search for reference..." />
+        </div>
+        <PanelGroup
+          className="flex-1 h-5/6"
+          autoSaveId="persistence conditional"
+          direction="horizontal"
+          style={{ height: "90%" }}
+        >
+          <Panel>
+            <div className="flex-1 overflow-auto px-4 h-full">
+              <Gallery search_text={query} />
             </div>
           </Panel>
-          <Panel>
-            <PanelGroup
-              className="flex-1"
-              autoSaveId="persistence conditional"
-              direction="horizontal"
-            >
-              <Panel>
-                <div className="flex-1 overflow-auto p-4 h-full">
-                  <Gallery search_text={query} />
+          <PanelResizeHandle />
+          {isDetailsViewOpen && (
+            <>
+              <Panel
+                defaultSize={25}
+                className="flex-1 border-l-2 border-light-grey-900"
+              >
+                <div className="overflow-auto px-4 h-full">
+                  <AssetDetails />
                 </div>
               </Panel>
-              <PanelResizeHandle />
-              {isDetailsViewOpen && (
-                <>
-                  <Panel
-                    defaultSize={25}
-                    className="flex-1 border-l-2 border-light-grey-900"
-                  >
-                    <div className="overflow-auto p-4 h-full">
-                      <AssetDetails />
-                    </div>
-                  </Panel>
-                </>
-              )}
-            </PanelGroup>
-          </Panel>
+            </>
+          )}
         </PanelGroup>
       </main>
 
