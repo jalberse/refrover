@@ -27,8 +27,8 @@ pub struct ConnectionPoolState(pub Mutex<InnerConnectionPoolState>);
 
 impl ConnectionPoolState
 {
-    pub fn get_connection(&self) -> PooledConnection<ConnectionManager<SqliteConnection>>
+    pub fn get_connection(&self) -> anyhow::Result<PooledConnection<ConnectionManager<SqliteConnection>>>
     {
-        self.0.lock().unwrap().pool.get().unwrap()
+        Ok(self.0.lock().unwrap().pool.get()?)
     }
 }

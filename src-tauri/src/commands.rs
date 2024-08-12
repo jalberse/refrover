@@ -93,9 +93,9 @@ pub async fn fetch_metadata(
 ) -> TAResult<FileMetadata>
 {
     let uuid = Uuid::parse_str(&file_id).into_ta_result()?;
-    let mut connection = db::get_db_connection(&pool_state);
+    let mut connection = db::get_db_connection(&pool_state)?;
 
-    let filepath = queries::get_filepath(uuid, &mut connection)
+    let filepath = queries::get_filepath(uuid, &mut connection)?
         .ok_or(anyhow::anyhow!("File not found for UUID {:?}", uuid)).into_ta_result()?;
     
     // Get the thumbnail filepath - the thumbnail should typically exist by this point, but we ensure it here.

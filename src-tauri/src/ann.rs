@@ -124,7 +124,7 @@ pub fn populate_hnsw(app: &mut App) -> anyhow::Result<()>
 {
     let pool_state = app.state::<ConnectionPoolState>();
 
-    let connection = &mut db::get_db_connection(&pool_state);
+    let connection = &mut db::get_db_connection(&pool_state)?;
     
     let results = SelectDsl::select(image_features_vit_l_14_336_px::table, ImageFeatureVitL14336Px::as_select())
         .load::<ImageFeatureVitL14336Px>(connection).context("Unable to load image features")?;

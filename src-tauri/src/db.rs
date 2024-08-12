@@ -48,40 +48,39 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
     }
 }
 
-pub fn get_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
-    let db_path = get_db_path();
+pub fn get_connection_pool() -> anyhow::Result<Pool<ConnectionManager<SqliteConnection>>> {
+    let db_path = get_db_path()?;
 
     let manager = ConnectionManager::<SqliteConnection>::new(db_path);
 
-    Pool::builder()
+    Ok(Pool::builder()
         .test_on_check_out(true)
         .connection_customizer(Box::new(ConnectionOptions {
             enable_wal: true,
             enable_foreign_keys: true,
             busy_timeout: Some(Duration::from_secs(BUSY_TIMEOUT_SECONDS)),
         }))
-        .build(manager)
-        .expect("Error creating connection pool")
+        .build(manager)?)
 }
 
 pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_data: bool) -> anyhow::Result<()> {
-    run_migrations(pool_state);
+    run_migrations(pool_state)?;
     
     // TODO Remove this eventually, it's just for testing. We will eventually be populating the DB via the UI and calling into more specific functions.
     if populate_dummy_data {
-        populate_db_dummy_data_tags(pool_state);
-        populate_image_features(pool_state);
+        populate_db_dummy_data_tags(pool_state)?;
+        populate_image_features(pool_state)?;
     }
 
     Ok(())
 }
 
-pub fn get_db_connection(pool_state: &tauri::State<'_, ConnectionPoolState>) -> PooledConnection<ConnectionManager<SqliteConnection>> {
+pub fn get_db_connection(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<PooledConnection<ConnectionManager<SqliteConnection>>> {
     pool_state.get_connection()
 }
 
 fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()> {
-    let mut connection = get_db_connection(pool_state);
+    let mut connection = get_db_connection(pool_state)?;
     // Since this error size isn't known at compile-time, convert the error as necessary.
     let result = connection.run_pending_migrations(MIGRATIONS);
     if let Err(e) = result {
@@ -90,18 +89,20 @@ fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow:
     anyhow::Ok(())
 }
 
-fn get_db_path() -> String {
+fn get_db_path() -> anyhow::Result<String> {
     // TODO Pick a better spot for this, possibly in the app data directory?
-    let home_dir = dirs::home_dir().expect("Couldn't find home directory!");
-    home_dir.to_str().unwrap().to_string() + "/.config/refrover/sqlite.refrover.db"
+    let home_dir = dirs::home_dir().ok_or(anyhow::anyhow!("Unable to get home directory"))?;
+    Ok(home_dir.to_str()
+        .ok_or(anyhow::anyhow!("Unable to convert home directory PathBuf to string"))?
+        .to_string() + "/.config/refrover/sqlite.refrover.db")
 }
 
-fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState>)
+fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()>
 {
     use crate::schema::{base_directories, file_tags, files, tags};
 
     let base_dir = "D:\\refrover_photos";
-    let connection = &mut db::get_db_connection(pool_state);
+    let connection = &mut db::get_db_connection(pool_state)?;
 
     // TODO - This would be initialized somewhere else. Probably populated when the db file is first created.
     let source_id = Uuid::new_v4();
@@ -160,8 +161,7 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
 
     diesel::insert_into(tags::table)
         .values(&new_tags)
-        .execute(connection)
-        .expect("Error inserting tags");
+        .execute(connection)?;
 
     // https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
     // Figure 5. Example of a DAG hierarchy.
@@ -188,7 +188,8 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
     let _ = add_tag_edge(abctech_id, jale_id, &source_id.to_string(), connection);
 
     // Get the tag edge ID between technicians and abc tech.
-    let tag_edge_id = get_edge_id(technicians_id, abctech_id, &source_id.to_string(), connection).expect("Error finding edge ID");
+    let tag_edge_id = get_edge_id(technicians_id, abctech_id, &source_id.to_string(), connection)?
+        .ok_or(anyhow::anyhow!("Error getting tag edge ID"))?;
 
     // Delete the tag edge between technicians and abc tech.
     // This is just to show that we can delete edges.
@@ -206,9 +207,7 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
     // Insert the base directory
     diesel::insert_into(base_directories::table)
         .values(new_base_dir)
-        .get_result::<(String, String)>(connection)
-        .expect("Error inserting base dir");
-        
+        .get_result::<(String, String)>(connection)?;
         
     // TODO When we actually let users choose a directory, we'll need to handle
     //    nesting. I think we'll do that by having a function like this that
@@ -221,16 +220,17 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
     //    If it's a nested import, that involves adding the edges too.
     //    In UX they'd get to look at the tree of dirs and select which to import.
 
-    let paths = fs::read_dir(base_dir).unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect::<Vec<_>>();
+    let paths: anyhow::Result<Vec<PathBuf>> = fs::read_dir(base_dir)?
+        .map(|entry| Ok(entry?.path()))
+        .collect();
+    let paths = paths?;
 
     let half_size = paths.len() / 2;
 
     // Insert the paths of half the files, and tag them as "Admins"
     for path in &paths[..half_size]
     {
-        let relative_path = path.strip_prefix(base_dir).unwrap().to_str().unwrap();
+        let relative_path = path.strip_prefix(base_dir)?.to_str().ok_or(anyhow::anyhow!("Error converting path to string"))?;
 
         let new_file_id = Uuid::new_v4();
         let new_file = NewFile {
@@ -242,8 +242,7 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
         diesel::insert_into(files::table)
             .values(new_file)
             .returning(files::id)
-            .execute(connection)
-            .expect("Error inserting file");
+            .execute(connection)?;
 
         let new_file_tag = NewFileTag {
             file_id: &new_file_id.to_string(),
@@ -253,14 +252,14 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
         // This half gets the "Admins" tag
         diesel::insert_into(file_tags::table)
             .values(new_file_tag)
-            .execute(connection)
-            .expect("error inserting file relationship with tag A");
+            .execute(connection)?;
     }
 
     // Do the same for the other half, for tag "Users"
     for path in &paths[half_size..]
     {
-        let relative_path = path.strip_prefix(base_dir).unwrap().to_str().unwrap();
+        let relative_path = path.strip_prefix(base_dir)?.to_str()
+            .ok_or(anyhow::anyhow!("Error converting path to string"))?;
 
         let new_file_id = Uuid::new_v4();
         let new_file = NewFile {
@@ -271,8 +270,7 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
 
         diesel::insert_into(files::table)
             .values(new_file)
-            .execute(connection)
-            .expect("Error inserting file");
+            .execute(connection)?;
 
         // This half gets the "Users" tag
         let new_file_tag = NewFileTag {
@@ -282,9 +280,10 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
 
         diesel::insert_into(file_tags::table)
             .values(new_file_tag)
-            .execute(connection)
-            .expect("error inserting file relationship with tag B");
+            .execute(connection)?;
     }
+    
+    Ok(())
 }
 
 // To be called after populate_dummy_data
@@ -294,7 +293,7 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
 //   But in any case, we'd want it to be some asynch task that's going and updating our KNN and table in the background
 //   while users are allowing to continue using the app while that search information is updated for later.
 //  TODO (Also check the system resources while we're doing this to see if we're hitting the GPU and IO stuff)
-fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>)
+fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()>
 {
     // Query for all of the filepaths by joining the base_directories and files tables.
 
@@ -303,31 +302,33 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>)
     use schema::base_directories::dsl::*;
 
     // Load our CLIP model.
-    let clip = clip::Clip::new().unwrap();
+    let clip = clip::Clip::new()?;
 
-    let connection = &mut db::get_db_connection(pool_state);
+    let connection = &mut db::get_db_connection(pool_state)?;
 
     let all_files: Vec<(String, String, String)> = base_directories.inner_join(files)
         .select((schema::files::dsl::id, path, relative_path))
-        .load::<(String, String, String)>(connection).unwrap();
+        .load::<(String, String, String)>(connection)?;
 
-    all_files.chunks(64).for_each(|chunk| {
+    for chunk in all_files.chunks(64)
+    {
         // Get a vec of pathbufs to images
         let paths: Vec<PathBuf> = chunk.iter().map(|(_, base, rel) | -> PathBuf {
             PathBuf::from(Path::new(&base).join(rel))
         }).collect();
-
+        
         // Load and preprocess our images
         let images = preprocessing::load_image_batch(&paths);
-
+        
         // Get image encodings
-        let image_encodings: Array2<f32> = clip.encode_image(images).unwrap();
-
+        let image_encodings: Array2<f32> = clip.encode_image(images)?;
+        
         // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
-        let serialized_encodings: Vec<Vec<u8>> = image_encodings.outer_iter().map(|row| {
-            bincode::serialize(&row.to_vec()).unwrap()
+        let serialized_encodings: anyhow::Result<Vec<Vec<u8>>> = image_encodings.outer_iter().map(|row| {
+            Ok(bincode::serialize(&row.to_vec())?)
         }).collect();
-
+        let serialized_encodings = serialized_encodings?;
+        
         // Insert the image encodings into the image_features_vit_l_14_336_px table
         // The encoding is serialized with serde.
         // The ID of the encoding is the same as the file ID.
@@ -337,12 +338,14 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>)
                 feature_vector: encoding
             }
         }).collect();
-
+        
         diesel::insert_into(image_features_vit_l_14_336_px)
             .values(&new_image_features)
-            .execute(connection)
-            .expect("Error inserting image features");
-    });
+            .execute(connection)?;
+    
+    }
+
+    Ok(())
 
     // The feature vectors should now be in the DB.
     // TODO - We'll actually have some load_knn() fn or similar that queries for that after this is done.

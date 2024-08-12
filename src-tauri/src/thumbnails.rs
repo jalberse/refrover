@@ -35,11 +35,11 @@ pub fn ensure_thumbnail_exists(
     pool_state: &tauri::State<'_, ConnectionPoolState>
 ) -> anyhow::Result<(Uuid, String)>
 {
-    let mut connection = db::get_db_connection(pool_state);
+    let mut connection = db::get_db_connection(pool_state)?;
 
     let app_data_path = app_handle.path_resolver().app_data_dir().ok_or(anyhow::anyhow!("Error getting app data path"))?;
 
-    let db_thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection);
+    let db_thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection)?;
 
     match db_thumbnail
     {
@@ -56,7 +56,7 @@ pub fn ensure_thumbnail_exists(
 
             // The thumbnail exists in the DB but not on disk.
             // Delete the DB entry.
-            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id)?, &mut connection);
+            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id)?, &mut connection)?;
         },
         None => {},
     }
@@ -72,8 +72,9 @@ pub fn ensure_thumbnail_exists(
     // get a fix for it very soon as well.
     // Though rather than waiting, this might be sufficient: https://docs.rs/kamadak-exif/latest/exif/
 
-    // Create the thumbnail + save it
-    let file_path = queries::get_filepath(file_id, &mut connection).ok_or(anyhow::anyhow!("File not found for UUID {:?}", file_id))?;
+    // Create the thumbnail + save it.
+    // We do expect the file to exist by this point, so it's an error if it doesn't.
+    let file_path = queries::get_filepath(file_id, &mut connection)?.ok_or(anyhow::anyhow!("File not found for UUID {:?}", file_id))?;
     let orig_image = image::open(file_path)?;
     let thumbnail = thumbnail(&orig_image);
     thumbnail.save_with_format(new_thumbnail_full_path.clone(), image::ImageFormat::WebP)?;
@@ -85,7 +86,7 @@ pub fn ensure_thumbnail_exists(
         path: &new_thumbnail_filename,
     };
 
-    queries::insert_thumbnail(&new_thumbnail_db, &mut connection);
+    queries::insert_thumbnail(&new_thumbnail_db, &mut connection)?;
 
     let file_prepend = Path::new("file://");
     let full_path = file_prepend
