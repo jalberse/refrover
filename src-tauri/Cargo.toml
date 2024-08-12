@@ -37,6 +37,8 @@ tracing-subscriber = { version = "0.3.18", features = [ "env-filter", "fmt" ] }
 imghdr = { git = "https://github.com/jalberse/rust-imghdr.git", branch = "master", features = [ "serde" ] }
 imagesize = "0.13.0"
 chrono = { version = "0.4.38", features = ["serde"] }
+anyhow = "1.0.86"
+anyhow-tauri = "1.0.0"
 
 [dependencies.uuid]
 version = "1.10.0"

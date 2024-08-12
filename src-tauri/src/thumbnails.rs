@@ -1,9 +1,7 @@
 use std::path::Path;
 
-use diesel::SqliteConnection;
 use image::{DynamicImage, GenericImageView, ImageBuffer};
 
-use rayon::prelude::*;
 use uuid::Uuid;
 
 use crate::{db, models::NewThumbnail, queries, state::ConnectionPoolState};
@@ -35,11 +33,11 @@ pub fn ensure_thumbnail_exists(
     file_id: Uuid,
     app_handle: &tauri::AppHandle,
     pool_state: &tauri::State<'_, ConnectionPoolState>
-) -> (Uuid, String)
+) -> anyhow::Result<(Uuid, String)>
 {
     let mut connection = db::get_db_connection(pool_state);
 
-    let app_data_path = app_handle.path_resolver().app_data_dir().unwrap();
+    let app_data_path = app_handle.path_resolver().app_data_dir().ok_or(anyhow::anyhow!("Error getting app data path"))?;
 
     let db_thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection);
 
@@ -50,12 +48,15 @@ pub fn ensure_thumbnail_exists(
             let full_path = app_data_path.join(&thumbail.path);
 
             if full_path.exists() {
-                return (Uuid::parse_str(&thumbail.id).unwrap(), full_path.to_str().unwrap().to_string());
+                return Ok((
+                    Uuid::parse_str(&thumbail.id)?,
+                    full_path.to_str().ok_or(anyhow::anyhow!("Error converting path"))?.to_string()
+                ));
             }
 
             // The thumbnail exists in the DB but not on disk.
             // Delete the DB entry.
-            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id).unwrap(), &mut connection);
+            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id)?, &mut connection);
         },
         None => {},
     }
@@ -72,10 +73,10 @@ pub fn ensure_thumbnail_exists(
     // Though rather than waiting, this might be sufficient: https://docs.rs/kamadak-exif/latest/exif/
 
     // Create the thumbnail + save it
-    let file_path = queries::get_filepath(file_id, &mut connection).unwrap();
-    let orig_image = image::open(file_path).unwrap();
+    let file_path = queries::get_filepath(file_id, &mut connection).ok_or(anyhow::anyhow!("File not found for UUID {:?}", file_id))?;
+    let orig_image = image::open(file_path)?;
     let thumbnail = thumbnail(&orig_image);
-    thumbnail.save_with_format(new_thumbnail_full_path.clone(), image::ImageFormat::WebP).unwrap();
+    thumbnail.save_with_format(new_thumbnail_full_path.clone(), image::ImageFormat::WebP)?;
 
     // Add the thumbnail to the thumbnails table.
     let new_thumbnail_db = NewThumbnail {
@@ -86,9 +87,11 @@ pub fn ensure_thumbnail_exists(
 
     queries::insert_thumbnail(&new_thumbnail_db, &mut connection);
 
-    // TODO Should we still do this if using the asset revolving from Tauri?
     let file_prepend = Path::new("file://");
-    let full_path = file_prepend.join(new_thumbnail_full_path).to_str().unwrap().to_string();
+    let full_path = file_prepend
+        .join(&new_thumbnail_full_path)
+        .to_str().ok_or(anyhow::anyhow!("Unable to join thumbnail file path for {:?}. Is it valid UTF-8?", new_thumbnail_full_path))?
+        .to_string();
 
-    (new_thumbnail_id, full_path)
+    Ok((new_thumbnail_id, full_path))
 }

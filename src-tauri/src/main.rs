@@ -32,7 +32,7 @@ use tauri::Manager;
 //    use it from the frontend when we know we are adding new files via a more
 //    "official" path (like a button in the UI).
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     tauri::Builder::default()
@@ -44,7 +44,7 @@ fn main() {
         )
         .manage(
             ClipState(
-                    Mutex::new(InnerClipState { clip: Clip::new().unwrap() })
+                    Mutex::new(InnerClipState { clip: Clip::new()? })
                 )
             )
         .manage(
@@ -59,7 +59,7 @@ fn main() {
             let populate_dummy_data = match app.get_cli_matches() {
                 Ok(matches) => 
                 {
-                    matches.args["populate-dummy-data"].value.as_bool().unwrap()
+                    matches.args["populate-dummy-data"].value.as_bool().ok_or(anyhow::anyhow!("Failed to get value for populate-dummy-data"))?
                 },
                 Err(_) => 
                 {
@@ -76,7 +76,7 @@ fn main() {
 
             // We rebuild every time the app launches; it is fast enough, and it handles the fact that
             // we can't remove elements from the HNSW index.
-            ann::populate_hnsw(app);
+            ann::populate_hnsw(app)?;
 
             Ok(())
         })
@@ -87,4 +87,6 @@ fn main() {
             ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    Ok(())
 }

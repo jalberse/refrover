@@ -4,7 +4,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-
 use diesel::connection::SimpleConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
@@ -65,7 +64,7 @@ pub fn get_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
         .expect("Error creating connection pool")
 }
 
-pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_data: bool) {
+pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_data: bool) -> anyhow::Result<()> {
     run_migrations(pool_state);
     
     // TODO Remove this eventually, it's just for testing. We will eventually be populating the DB via the UI and calling into more specific functions.
@@ -73,15 +72,22 @@ pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_d
         populate_db_dummy_data_tags(pool_state);
         populate_image_features(pool_state);
     }
+
+    Ok(())
 }
 
 pub fn get_db_connection(pool_state: &tauri::State<'_, ConnectionPoolState>) -> PooledConnection<ConnectionManager<SqliteConnection>> {
     pool_state.get_connection()
 }
 
-fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) {
+fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()> {
     let mut connection = get_db_connection(pool_state);
-    connection.run_pending_migrations(MIGRATIONS).unwrap();
+    // Since this error size isn't known at compile-time, convert the error as necessary.
+    let result = connection.run_pending_migrations(MIGRATIONS);
+    if let Err(e) = result {
+        return Err(anyhow::anyhow!("Error running migrations: {:?}", e));
+    }
+    anyhow::Ok(())
 }
 
 fn get_db_path() -> String {

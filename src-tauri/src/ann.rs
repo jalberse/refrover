@@ -1,3 +1,4 @@
+use anyhow::{Context, Ok};
 /// Approximate nearest neighbor search using the HNSW algorithm.
 /// This module is a wrapper around the hnsw_rs crate that provides a more
 /// convenient API for our use case, setting defaults and taking care of
@@ -119,17 +120,25 @@ impl<'a> HnswSearch<'a>
 
 /// Populates the HNSW index with the feature vectors from the database, intended for startup.
 /// As more images are added to the application during runtime, they should be added to the HNSW index as necessary.
-pub fn populate_hnsw(app: &mut App)
+pub fn populate_hnsw(app: &mut App) -> anyhow::Result<()>
 {
     let pool_state = app.state::<ConnectionPoolState>();
 
     let connection = &mut db::get_db_connection(&pool_state);
     
     let results = SelectDsl::select(image_features_vit_l_14_336_px::table, ImageFeatureVitL14336Px::as_select())
-        .load::<ImageFeatureVitL14336Px>(connection).unwrap();
+        .load::<ImageFeatureVitL14336Px>(connection).context("Unable to load image features")?;
 
+    // TODO Work anyhow into this closure, it's a bit annoying. fetch_thumbnails() does basically what we'd need to do;
+    //      the iterator implements Into for anyhow::Result, so you just need to specify that type for hnsw_elements.
+    //      Closures are the only slightly tricky bit left, so just do it and we can propagate up through commands etc and close the ticket.
     // Create the HnswElements
-    let hnsw_elements: Vec<HnswElement> = results.iter().map(|x| HnswElement { feature_vector: bincode::deserialize(&x.feature_vector[..]).unwrap(), id: Uuid::parse_str(&x.id).unwrap() }).collect();
+    let hnsw_elements = results.iter().map(
+        |x| Ok(HnswElement 
+        {
+            feature_vector: bincode::deserialize(&x.feature_vector[..])?,
+            id: Uuid::parse_str(&x.id)?,
+        })).collect::<anyhow::Result<Vec<HnswElement>>>()?;
 
     // Get the HnswSearch from the app's SearchState
     let state = app.state::<SearchState>();
@@ -137,4 +146,6 @@ pub fn populate_hnsw(app: &mut App)
 
     // Add the elements to the Hnsw
     state.hnsw.insert_slice(hnsw_elements);
+
+    Ok(())
 }

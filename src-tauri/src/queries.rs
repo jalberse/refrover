@@ -577,10 +577,10 @@ mod tests
    //   not just for the tests. See ROVER-111.
    pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
    
-   fn establish_connection_in_memory() -> SqliteConnection
+   fn establish_connection_in_memory() -> anyhow::Result<SqliteConnection>
    {
-      let connection = SqliteConnection::establish(":memory:").unwrap();
-      connection
+      let connection = SqliteConnection::establish(":memory:")?;
+      Ok(connection)
    }
 
    fn run_migrations(connection: &mut impl MigrationHarness<Sqlite>) {
@@ -591,17 +591,17 @@ mod tests
        connection.run_pending_migrations(MIGRATIONS).expect("Error running migrations in test");
    }
 
-   fn setup() -> SqliteConnection
+   fn setup() -> anyhow::Result<SqliteConnection>
    {
-      let mut connection = establish_connection_in_memory();
+      let mut connection = establish_connection_in_memory()?;
       run_migrations(&mut connection);
-      connection
+      Ok(connection)
    }
 
    #[test]
    fn test_get_filepath()
    {
-      let mut connection = setup();
+      let mut connection = setup().unwrap();
 
       let file_id = Uuid::new_v4();
       let base_directory_id = Uuid::new_v4();

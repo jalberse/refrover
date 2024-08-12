@@ -3,6 +3,7 @@ use std::path::Path;
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
 use ort::{self, inputs, GraphOptimizationLevel};
 use ort::DirectMLExecutionProvider;
+use anyhow;
 
 use crate::preprocessing::FEATURE_VECTOR_LENGTH;
 
@@ -78,7 +79,7 @@ impl Clip
     /// and convert it into an array for this input.
     /// 
     /// Returns a 2D array of shape (batch_size, FEATURE_VECTOR_LENGTH).
-    pub fn encode_image(&self, images: Array<f32, Dim<[usize; 4]>>) -> Result<Array2<f32>, ort::Error>
+    pub fn encode_image(&self, images: Array<f32, Dim<[usize; 4]>>) -> anyhow::Result<Array2<f32>>
     {
         let images_len = images.len_of(Axis(0));
         let outputs = self.visual_session.run(inputs![images]?)?;
@@ -88,7 +89,7 @@ impl Clip
         // First dimension is for each image in the batch; the second is the feature vector per image.
         let output = output.try_extract_tensor::<f32>()?;
 
-        let output: Array2<f32> = output.to_shape((images_len, FEATURE_VECTOR_LENGTH)).unwrap().to_owned();
+        let output = output.to_shape((images_len, FEATURE_VECTOR_LENGTH))?.to_owned();
 
         // For example:
         // With one image in the batch....
@@ -105,7 +106,7 @@ impl Clip
     /// Generate tokens using preprocessing::tokenize_batch().
     /// 
     /// Returns a 2D array of shape (batch_size, FEATURE_VECTOR_LENGTH).
-    pub fn encode_text(&self, tokens: Array2<i32>) -> Result<Array2<f32>, ort::Error>
+    pub fn encode_text(&self, tokens: Array2<i32>) -> anyhow::Result<Array2<f32>>
     {
         let tokens_len = tokens.len_of(Axis(0));
         let outputs = self.text_session.run(inputs![tokens]?)?;
@@ -115,7 +116,7 @@ impl Clip
         // First dimension is for each text in the batch; the second is the feature vector per text.
         let output = output.try_extract_tensor::<f32>()?;
 
-        let output: Array2<f32> = output.to_shape((tokens_len, FEATURE_VECTOR_LENGTH)).unwrap().to_owned();
+        let output: Array2<f32> = output.to_shape((tokens_len, FEATURE_VECTOR_LENGTH))?.to_owned();
 
         Ok(output)
     }
@@ -124,7 +125,7 @@ impl Clip
     /// containing the logit scores corresponding to each image and text input.
     /// The values are cosine similarities between the corresponding image and text features,
     /// times 100.
-    pub fn forward(&self, images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<i32>) -> Result<ForwardResults, ort::Error>
+    pub fn forward(&self, images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<i32>) -> anyhow::Result<ForwardResults>
     {
         let outputs = self.forward_session.run(inputs![
             images,
