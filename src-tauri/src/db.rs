@@ -9,6 +9,7 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use image::DynamicImage;
 use ndarray::Array2;
 use uuid::Uuid;
 
@@ -313,16 +314,25 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
     for chunk in all_files.chunks(64)
     {
         // Get a vec of pathbufs to images
-        let paths: Vec<PathBuf> = chunk.iter().map(|(_, base, rel) | -> PathBuf {
-            PathBuf::from(Path::new(&base).join(rel))
+        let paths: anyhow::Result<Vec<(Uuid, PathBuf)>> = chunk.iter().map(|(uuid, base, rel) | {
+            Ok((Uuid::parse_str(uuid)?, PathBuf::from(Path::new(&base).join(rel))))
         }).collect();
+        let paths = paths?;
         
-        // Load and preprocess our images
+        // Load and preprocess our images.
         let images = preprocessing::load_image_batch(&paths);
         
-        // Get image encodings
-        let image_encodings: Array2<f32> = clip.encode_image(images)?;
-        
+        // Split images into those that succesfully loaded and those that failed.
+        // Images may fail to load because they are not images, not found, etc.
+        let (images, failed_images) = images.into_iter().partition::<Vec<_>, _>(|(_, img)| img.is_ok());
+
+        // Handle images that succesfully loaded.
+        // Unwrap the succesful images. This is safe because we just partitioned.
+        let images: Vec<(Uuid, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.unwrap())).collect();
+        let resized_images = preprocessing::resize_images(images);
+        let image_clip_input = preprocessing::image_to_clip_format(resized_images);
+        let image_encodings: Array2<f32> = clip.encode_image(image_clip_input)?;
+
         // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
         let serialized_encodings: anyhow::Result<Vec<Vec<u8>>> = image_encodings.outer_iter().map(|row| {
             Ok(bincode::serialize(&row.to_vec())?)
@@ -342,7 +352,11 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
         diesel::insert_into(image_features_vit_l_14_336_px)
             .values(&new_image_features)
             .execute(connection)?;
-    
+
+        // Grab the UUIDs of the files that failed to load for some reason (e.g. not an image, not found...)
+        let failed_uuids: Vec<Uuid> = failed_images.into_iter().map(|(uuid, _)| uuid).collect();
+
+        // TODO We need a new table to just insert these failed images into.
     }
 
     Ok(())
