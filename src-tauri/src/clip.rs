@@ -18,6 +18,11 @@ pub struct ForwardResults
 /// The encoding functions outputs the latent feature vectore of text and images.
 /// The forward function outputs the similarity score between the text and image.
 /// See the [OpenAI CLIP paper](https://arxiv.org/abs/2103.00020) for more details.
+/// 
+/// Note that our encode_text() and encode_image() functions also normalize the output feature vectors.
+/// This differs from the CLIP implementation, which only performs that normalization in the forward() function.
+/// We do this because our HNSW index assumes L2 normalized vectors, so that the cosine similarity is equivalent to the dot product, which is cheaper.
+/// 
 /// Uses an ONNX representation of the model so that it can be used in Rust,
 /// and to execute the model on a wide variety of hardware using the ONNX runtime.
 /// The ONNX representation is created by: https://github.com/jalberse/CLIP-to-onnx-converter
@@ -89,7 +94,7 @@ impl Clip
         // First dimension is for each image in the batch; the second is the feature vector per image.
         let output = output.try_extract_tensor::<f32>()?;
 
-        let output = output.to_shape((images_len, FEATURE_VECTOR_LENGTH))?.to_owned();
+        let mut output = output.to_shape((images_len, FEATURE_VECTOR_LENGTH))?.to_owned();
 
         // For example:
         // With one image in the batch....
@@ -98,6 +103,10 @@ impl Clip
         // With two images in batch...
         // Output: [[0.51000077, ..., -0.37341008], [-0.061004326, ..., -0.3435823]],
         //    shape=[2, 768], strides=[768, 1], layout=Cc (0x5), dynamic ndim=2
+
+        // Normalize the output feature vectors. Our HNSW index assumes L2 normalized vectors,
+        // so that the cosine similarity is equivalent to the dot product, which is cheaper.
+        self.normalize_feature_vectors(&mut output);
 
         Ok(output)
     }
@@ -116,7 +125,11 @@ impl Clip
         // First dimension is for each text in the batch; the second is the feature vector per text.
         let output = output.try_extract_tensor::<f32>()?;
 
-        let output: Array2<f32> = output.to_shape((tokens_len, FEATURE_VECTOR_LENGTH))?.to_owned();
+        let mut output: Array2<f32> = output.to_shape((tokens_len, FEATURE_VECTOR_LENGTH))?.to_owned();
+
+        // Normalize the output feature vectors. Our HNSW index assumes L2 normalized vectors,
+        // so that the cosine similarity is equivalent to the dot product, which is cheaper.
+        self.normalize_feature_vectors(&mut output);
 
         Ok(output)
     }
@@ -144,5 +157,16 @@ impl Clip
                 logits_per_text,
             }
         )
+    }
+
+    fn normalize_feature_vectors(&self, feature_vectors: &mut Array2<f32>)
+    {
+        feature_vectors.axis_iter_mut(Axis(0)).for_each(|mut row| {
+            let norm = row.dot(&row).sqrt();
+            if norm == 0.0 {
+                return;
+            }
+            row /= norm;
+        });
     }
 }
