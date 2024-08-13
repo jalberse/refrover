@@ -10,8 +10,10 @@ use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
 use app::state::ClipState;
+use app::state::ClipTokenizerState;
 use app::state::ConnectionPoolState;
 use app::state::InnerClipState;
+use app::state::InnerClipTokenizerState;
 use app::state::InnerConnectionPoolState;
 use app::state::InnerSearchState;
 use app::state::SearchState;
@@ -47,6 +49,11 @@ fn main() -> anyhow::Result<()> {
                     Mutex::new(InnerClipState { clip: Clip::new()? })
                 )
             )
+        .manage(
+            ClipTokenizerState(
+                    Mutex::new(InnerClipTokenizerState { tokenizer: instant_clip_tokenizer::Tokenizer::new() })
+                )
+        )
         .manage(
             SearchState(
                     Mutex::new(InnerSearchState { hnsw: HnswSearch::new() })

@@ -73,15 +73,13 @@ pub fn image_to_clip_format(images: Vec<(Uuid, Box<DynamicImage>)>) -> Array<f32
 	image_input
 }
 
-pub fn tokenize(text: &str) -> Array2<i32>
+pub fn tokenize(text: &str, tokenizer: &instant_clip_tokenizer::Tokenizer) -> Array2<i32>
 {
-	tokenize_batch([text].to_vec())
+	tokenize_batch([text].to_vec(), tokenizer)
 }
 
-pub fn tokenize_batch(text: Vec<&str>) -> Array2<i32>
+pub fn tokenize_batch(text: Vec<&str>, tokenizer: &instant_clip_tokenizer::Tokenizer) -> Array2<i32>
 {
-	// TODO Rather than initializing the tokenizer each time, Lazy load it.
-	let tokenizer = instant_clip_tokenizer::Tokenizer::new();
 	let tokens = tokenizer.tokenize_batch(text, CONTEXT_LENGTH);
 
 	// Convert to i32 (for ONNX)

@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::state::{ClipState, ConnectionPoolState};
+use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState};
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
 use imghdr;
@@ -19,6 +19,7 @@ pub async fn search_images<'a>(
         query_string: &str,
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
+        tokenizer_state: tauri::State<'_, ClipTokenizerState>,
     ) -> TAResult<Vec<FileUuid>>
 {
     if query_string.is_empty() {
@@ -28,7 +29,8 @@ pub async fn search_images<'a>(
     let mut hnsw_search = search_state.0.lock().unwrap();
     let hnsw = &mut hnsw_search.hnsw;
 
-    let query = preprocessing::tokenize(query_string);
+    let tokenizer = &tokenizer_state.0.lock().unwrap().tokenizer;
+    let query = preprocessing::tokenize(query_string, tokenizer);
 
     let clip = &mut clip_state.0.lock().unwrap().clip;
 

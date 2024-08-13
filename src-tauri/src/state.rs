@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
 use diesel::{r2d2::{ConnectionManager, Pool, PooledConnection}, SqliteConnection};
+use instant_clip_tokenizer;
 
 use crate::{ann::HnswSearch, clip::Clip};
 
@@ -32,3 +33,10 @@ impl ConnectionPoolState
         Ok(self.0.lock().unwrap().pool.get()?)
     }
 }
+
+pub struct InnerClipTokenizerState
+{
+    pub tokenizer: instant_clip_tokenizer::Tokenizer,
+}
+
+pub struct ClipTokenizerState(pub Mutex<InnerClipTokenizerState>);
