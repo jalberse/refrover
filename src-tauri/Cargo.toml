@@ -19,7 +19,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "1.6", features = [ "cli", "api-all"] }
 libsqlite3-sys = { version = "0.28.0", features = [ "bundled" ] }
-diesel = { version = "2.1.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2"] }
+diesel = { version = "2.1.6", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2", "time"] }
 diesel_migrations = "2.1.0"
 dirs = "5.0.1"
 rustc-hash = "2.0.0"
@@ -39,6 +39,7 @@ imagesize = "0.13.0"
 chrono = { version = "0.4.38", features = ["serde"] }
 anyhow = "1.0.86"
 anyhow-tauri = "1.0.0"
+time = "0.3.23"
 
 [dependencies.uuid]
 version = "1.10.0"

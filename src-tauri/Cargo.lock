@@ -143,6 +143,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-persisted-scope",
  "thiserror",
+ "time",
  "tracing-subscriber",
  "uuid",
 ]

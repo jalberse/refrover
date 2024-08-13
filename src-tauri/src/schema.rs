@@ -8,6 +8,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    failed_encodings (id) {
+        id -> Text,
+        error -> Text,
+        failed_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     file_tags (file_id, tag_id) {
         file_id -> Text,
         tag_id -> Text,
@@ -57,6 +65,7 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(failed_encodings -> files (id));
 diesel::joinable!(file_tags -> files (file_id));
 diesel::joinable!(file_tags -> tags (tag_id));
 diesel::joinable!(files -> base_directories (base_directory_id));
@@ -65,6 +74,7 @@ diesel::joinable!(thumbnails -> files (file_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     base_directories,
+    failed_encodings,
     file_tags,
     files,
     image_features_vit_l_14_336_px,

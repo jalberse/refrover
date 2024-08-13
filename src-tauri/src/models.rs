@@ -1,6 +1,7 @@
 use diesel::prelude::*;
 use diesel::sql_types::Integer; // Add this line
 use serde::Serialize;
+use time;
 
 use crate::schema::base_directories;
 
@@ -122,6 +123,25 @@ pub struct NewImageFeaturesVitL14336Px<'a> {
 pub struct ImageFeatureVitL14336Px {
     pub id: String,
     pub feature_vector: Vec<u8>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::failed_encodings)]
+pub struct NewFailedEncoding {
+    pub id: String,
+    pub error: String,
+    // When timestamp is None, the current time (the SQL default) is used.\
+    // https://docs.rs/diesel/latest/diesel/fn.insert_into.html#inserting-default-value-for-a-column
+    pub failed_at: Option<time::PrimitiveDateTime>,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::failed_encodings)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct FailedEncoding {
+    pub id: String,
+    pub error: String,
+    pub failed_at: time::PrimitiveDateTime,
 }
 
 #[derive(Queryable, Selectable)]

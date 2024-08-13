@@ -13,7 +13,7 @@ use image::DynamicImage;
 use ndarray::Array2;
 use uuid::Uuid;
 
-use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewImageFeaturesVitL14336Px, NewTag};
+use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewImageFeaturesVitL14336Px, NewTag, NewFailedEncoding};
 use crate::state::ConnectionPoolState;
 use crate::{clip, db, preprocessing, schema};
 use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
@@ -301,6 +301,7 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
     use schema::image_features_vit_l_14_336_px::dsl::*;
     use schema::files::dsl::*;
     use schema::base_directories::dsl::*;
+    use schema::failed_encodings;
 
     // Load our CLIP model.
     let clip = clip::Clip::new()?;
@@ -352,11 +353,20 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
         diesel::insert_into(image_features_vit_l_14_336_px)
             .values(&new_image_features)
             .execute(connection)?;
+        
+        // Convert the failed images into NewFailedEncoding structs and insert them into the failed_encodings table.
+        // The unwrap is safe because we just partitioned, so these are all Err results.
+        let new_failed_encodings: Vec<NewFailedEncoding> = failed_images.into_iter().map(|(uuid, img)| {
+            NewFailedEncoding {
+                id: uuid.to_string(),
+                error: img.as_ref().err().unwrap().to_string(),
+                failed_at: None
+            }
+        }).collect();
 
-        // Grab the UUIDs of the files that failed to load for some reason (e.g. not an image, not found...)
-        let failed_uuids: Vec<Uuid> = failed_images.into_iter().map(|(uuid, _)| uuid).collect();
-
-        // TODO We need a new table to just insert these failed images into.
+        diesel::insert_into(failed_encodings::table)
+            .values(&new_failed_encodings)
+            .execute(connection)?;
     }
 
     Ok(())
