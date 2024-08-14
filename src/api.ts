@@ -31,11 +31,16 @@ export async function fetchMetadata(fileUuid: string) {
 // If no thumbnail is available, it will be generated.
 // This may take some time to execute as thumbnails are generated and the search is performed.
 // We assume the caller knows the directory storing the thumbnails.
-export async function hnswSearch(queryString: string, numberNeighbors: number) {
+export async function hnswSearch(
+  queryString: string,
+  numberNeighbors: number,
+  efArg: number,
+) {
   try {
     const fileUuids = await invoke<FileUuid[]>("search_images", {
       queryString,
       numberNeighbors,
+      efArg,
     })
 
     try {

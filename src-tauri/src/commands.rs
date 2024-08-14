@@ -1,3 +1,4 @@
+use log::info;
 use uuid::Uuid;
 
 use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState};
@@ -18,6 +19,7 @@ use rayon::prelude::*; // For par_iter
 pub async fn search_images<'a>(
         query_string: &str,
         number_neighbors: usize,
+        ef_arg: usize,
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
         tokenizer_state: tauri::State<'_, ClipTokenizerState>,
@@ -41,11 +43,13 @@ pub async fn search_images<'a>(
         .ok_or(anyhow::anyhow!("Error converting query vector to slice for query {:?}", query_string))
         .into_ta_result()?;
 
-    let ef_arg = number_neighbors * 2;
+    info!("Searching for {:?}", query_string);
     let now = std::time::Instant::now();
+    // Ensure ef_arg >= num_neighbors.
+    let ef_arg = ef_arg.max(number_neighbors);
     let search_results = hnsw.search(query_vector_slice, number_neighbors, ef_arg);
     let elapsed = now.elapsed();
-    tracing::info!("Search took {:?} for ef_ arg {:?}", elapsed, ef_arg);
+    info!("Search took {:?} for {:?} neighbors with ef_ arg {:?}", elapsed, number_neighbors, ef_arg);
 
     let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 

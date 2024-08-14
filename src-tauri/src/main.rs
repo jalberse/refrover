@@ -17,7 +17,10 @@ use app::state::InnerClipTokenizerState;
 use app::state::InnerConnectionPoolState;
 use app::state::InnerSearchState;
 use app::state::SearchState;
+use log::info;
+use log::LevelFilter;
 use tauri::Manager;
+use tauri_plugin_log::LogTarget;
 
 // TODO: How do we want to handle new files that are added to watched dirs?
 // We need a FileSystemWatcher likely.
@@ -34,11 +37,23 @@ use tauri::Manager;
 //    use it from the frontend when we know we are adding new files via a more
 //    "official" path (like a button in the UI).
 
-fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+#[cfg(debug_assertions)]
+const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
+// TODO - We probably want the log level for release to be WARN in reality.
+#[cfg(not(debug_assertions))]
+const LOG_LEVEL: LevelFilter = LevelFilter::Info;
 
+fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())
+        .plugin(tauri_plugin_log::Builder::default().targets([
+                LogTarget::LogDir,
+                LogTarget::Stdout,
+                LogTarget::Webview,
+            ])
+            // Note that Trace level causes massive slowdowns
+            .level(LOG_LEVEL)
+            .build())
         .manage(
             ConnectionPoolState(
                     Mutex::new(InnerConnectionPoolState { pool: db::get_connection_pool()? })
@@ -83,7 +98,13 @@ fn main() -> anyhow::Result<()> {
 
             // We rebuild every time the app launches; it is fast enough, and it handles the fact that
             // we can't remove elements from the HNSW index.
+            info!("Populating HNSW index...");
+            let now = std::time::Instant::now();
             ann::populate_hnsw(app)?;
+            let elapsed = now.elapsed();
+            info!("HNSW rebuild took {:?}", elapsed);
+            info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
+            info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
 
             Ok(())
         })

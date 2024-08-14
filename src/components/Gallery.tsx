@@ -22,12 +22,17 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     (state) => state.setDetailsViewFileUuid,
   )
 
-  const number_neighbors = 50
+  // Reasonable defaults for the number of neighbors and efArg.
+  // We can adjust these as needed for the user experience, including
+  // cranking up the number of neighbors. Lag seems to be resulting from thumbnail loading
+  // on the frontend, our HNSW search is very fast. We're addressing the lag in ROVER-116.
+  const numberNeighbors = 500
+  const efArg = 800
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await hnswSearch(search_text, number_neighbors)
+        const result = await hnswSearch(search_text, numberNeighbors, efArg)
         setThumbnails(result)
       } catch (error) {
         console.error(error)

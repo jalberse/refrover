@@ -26,7 +26,7 @@ pub const DEFAULT_MAX_NB_CONNECTION: usize = 64;
 pub const DEFAULT_NB_LAYER: usize = 16;
 // This parameter controls the width of the search for neighbours during insertion.
 // Values from 400 to 800 are standard, with higher being more time consuming.
-pub const DEFAULT_EF_CONSTRUCTION: usize = 800;
+pub const DEFAULT_EF_CONSTRUCTION: usize = 400;
 pub const DEFAULT_MAX_ELEMS: usize = 10000;
 
 #[derive(Debug, Clone)]
@@ -34,10 +34,6 @@ pub struct HnswElement {
     pub feature_vector: Vec<f32>,
     pub id: Uuid,
 }
-
-// TODO We need to ensure that all vectors are L2 normalized before insertion or query.
-    //   Probably store them as such in the DB?
-    //   The reason is so that the cosine distance is equivalent to the dot product, and cheaper.
 
 /// Note that HNSW does not support removing points.
 /// To resolve this, the HNSW structure is rebuilt on start-up each time,
