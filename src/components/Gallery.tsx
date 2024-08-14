@@ -3,7 +3,7 @@
 import useRoverStore from "@/hooks/store"
 import type Thumbnail from "@/interfaces/Thumbnail"
 import { useEffect, useState } from "react"
-import { fetchThumbnails } from "../api"
+import { hnswSearch } from "../api"
 import GalleryCard from "./GalleryCard"
 
 interface GalleryProps {
@@ -22,10 +22,12 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     (state) => state.setDetailsViewFileUuid,
   )
 
+  const number_neighbors = 50
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await fetchThumbnails(search_text)
+        const result = await hnswSearch(search_text, number_neighbors)
         setThumbnails(result)
       } catch (error) {
         console.error(error)

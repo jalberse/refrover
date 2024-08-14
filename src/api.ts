@@ -25,15 +25,17 @@ export async function fetchMetadata(fileUuid: string) {
   }
 }
 
-// Fetches the thumbnails for the set of files with the given UUIDs.
+// Performs a KNN search using the HNSW index to find the nearest neighbors for the given query string.
+//
+// Fetches the thumbnails for the set of files with the resulting file UUIDs.
 // If no thumbnail is available, it will be generated.
-// This may take some time to execute as thumbnails are generated.
-// Returns a map from UUID to thumbnail image file names.
+// This may take some time to execute as thumbnails are generated and the search is performed.
 // We assume the caller knows the directory storing the thumbnails.
-export async function fetchThumbnails(queryString: string) {
+export async function hnswSearch(queryString: string, numberNeighbors: number) {
   try {
     const fileUuids = await invoke<FileUuid[]>("search_images", {
       queryString,
+      numberNeighbors,
     })
 
     try {
