@@ -45,7 +45,6 @@ pub async fn search_images<'a>(
     let now = std::time::Instant::now();
     let search_results = hnsw.search(query_vector_slice, number_neighbors, ef_arg);
     let elapsed = now.elapsed();
-    tracing::info!("Search took {:?} for ef_ arg {:?}", elapsed, ef_arg);
 
     let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 

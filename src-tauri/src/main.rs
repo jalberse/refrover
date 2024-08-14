@@ -35,8 +35,6 @@ use tauri::Manager;
 //    "official" path (like a button in the UI).
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())
         .manage(
