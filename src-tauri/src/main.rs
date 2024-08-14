@@ -22,21 +22,6 @@ use log::LevelFilter;
 use tauri::Manager;
 use tauri_plugin_log::LogTarget;
 
-// TODO: How do we want to handle new files that are added to watched dirs?
-// We need a FileSystemWatcher likely.
-//    If we add a file to a watched directory outside our process, we want to add it to the files table.
-//    If we are inserting on the files table within the app anyways,
-//     it would be cleaner to simply launch an async task at that time
-//     to encode the new files and add them to the features table + Hnsw struct.
-//    I imagine we'll want notify for that: https://github.com/notify-rs/notify?tab=readme-ov-file
-// This can probably be on hold for now. Make a JIRA ticket for it.
-//    For now, we can work on the front-end and worry about more "official" paths
-//    for adding new files to our system.
-// So there should be an "official" pipeline for adding new files to our system. ("ingest"?).
-//    Our FileSystem watcher will use it when it sees new files, and we'll
-//    use it from the frontend when we know we are adding new files via a more
-//    "official" path (like a button in the UI).
-
 #[cfg(debug_assertions)]
 const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 // TODO - We probably want the log level for release to be WARN in reality.
