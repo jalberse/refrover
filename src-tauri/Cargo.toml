@@ -29,10 +29,12 @@ image = "0.25.2"
 ndarray = "0.16.0"
 bincode = "1.3.3"
 rayon = "1.10.0"
-hnsw_rs = "0.3.0"
+# simdeez_f must be disabled for M1 chips. It only provides SIMD optimizations for x86_64 processors.
+hnsw_rs = { version = "0.3.0", features = [ "simdeez_f" ] }
 cpu-time = "1.0.0"
 thiserror = "1.0.63"
 tauri-plugin-persisted-scope = "0.1.3"
+tracing = "0.1"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter", "fmt" ] }
 imghdr = { git = "https://github.com/jalberse/rust-imghdr.git", branch = "master", features = [ "serde" ] }
 imagesize = "0.13.0"

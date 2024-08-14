@@ -17,6 +17,7 @@ use rayon::prelude::*; // For par_iter
 #[tauri::command]
 pub async fn search_images<'a>(
         query_string: &str,
+        number_neighbors: usize,
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
         tokenizer_state: tauri::State<'_, ClipTokenizerState>,
@@ -40,8 +41,11 @@ pub async fn search_images<'a>(
         .ok_or(anyhow::anyhow!("Error converting query vector to slice for query {:?}", query_string))
         .into_ta_result()?;
 
-    // TODO We will want to make sure ef_arg is optimized.
-    let search_results = hnsw.search(query_vector_slice, 50, 400);
+    let ef_arg = number_neighbors * 2;
+    let now = std::time::Instant::now();
+    let search_results = hnsw.search(query_vector_slice, number_neighbors, ef_arg);
+    let elapsed = now.elapsed();
+    tracing::info!("Search took {:?} for ef_ arg {:?}", elapsed, ef_arg);
 
     let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 

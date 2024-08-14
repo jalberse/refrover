@@ -18,10 +18,16 @@ use uuid::Uuid;
 
 use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{ConnectionPoolState, SearchState}};
 
-const DEFAULT_MAX_NB_CONNECTION: usize = 100;
-const DEFAULT_NB_LAYER: usize = 16;
-const DEFAULT_EF_C: usize = 400;
-const DEFAULT_MAX_ELEMS: usize = 10000;
+// The maximum number of links from one point to others.
+// Values from 16 to 64 are standard, with higher being more time consuming.
+pub const DEFAULT_MAX_NB_CONNECTION: usize = 64;
+// The maximum number of layers in graph
+// Must be less than or equal to 16.
+pub const DEFAULT_NB_LAYER: usize = 16;
+// This parameter controls the width of the search for neighbours during insertion.
+// Values from 400 to 800 are standard, with higher being more time consuming.
+pub const DEFAULT_EF_CONSTRUCTION: usize = 800;
+pub const DEFAULT_MAX_ELEMS: usize = 10000;
 
 #[derive(Debug, Clone)]
 pub struct HnswElement {
@@ -56,12 +62,19 @@ impl<'a> HnswSearch<'a>
     {
         let max_nb_connection = DEFAULT_MAX_NB_CONNECTION;
         let nb_layer = DEFAULT_NB_LAYER;
-        let ef_c = DEFAULT_EF_C;
+        let ef_c = DEFAULT_EF_CONSTRUCTION;
         let nb_elem = DEFAULT_MAX_ELEMS;
         let hnsw_id_to_file_id_map = FxHashMap::default();
         let current_id = 0;
-        let mut hnsw = Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_c, DistCosine{});
+        let mut hnsw = Hnsw::<f32, DistCosine>::new(
+            max_nb_connection, 
+            nb_elem, 
+            nb_layer,
+            ef_c,
+            DistCosine{}
+            );
         // Enabled according to ann-glove25-angular example from hnsw_rs.
+        // Angular data may be highly clustered, so we enable this.
         hnsw.set_extend_candidates(true);
         HnswSearch
         { 
@@ -99,8 +112,9 @@ impl<'a> HnswSearch<'a>
     /// The distances are the cosine distances between the query vector and the feature vectors of the neighbors.
     /// 
     /// @param  ef_arg This parameter controls the width of the search in the lowest level,
-    /// it must be greater than number of neighbours asked but can be less than ef_construction.
+    /// it MUST be greater than number of neighbours asked (knbn) but CAN be less than DEFAULT_EF_CONSTRUCTION.
     /// As a rule of thumb could be between the number of neighbours we will ask for (knbn arg in search method) and DEFAULT_MAX_NB_CONNECTION.
+    /// It does not limit the number of neighbours returned; recall will be lower if ef_arg is lower, but search is slower with high ef_arg.
     pub fn search(&self, query: &[f32], knbn: usize, ef_arg: usize) -> Vec<(Uuid, f32)>
     {
         let knn_neighbours = self.hnsw.search(query, knbn, ef_arg);
