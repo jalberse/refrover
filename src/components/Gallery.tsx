@@ -28,11 +28,24 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   // on the frontend, our HNSW search is very fast. We're addressing the lag in ROVER-116.
   const numberNeighbors = 500
   const efArg = 800
+  // This is a somewhat arbitrary, large value. It will include results that are pretty semantically dissimilar.
+  // But, we prefer to include errant results than exclude relevant ones. The results are ordered,
+  // and the filtering on this threshold is done on the results of an (already very fast) HNSW search,
+  // so this (1) doesn't add much time and (2) ensures we don't miss relevant results, with good results at the top anyways.
+  // For context, ~0.75 is nearly a perfect search result, and ~0.85 is pretty semantically dissimilar.
+  // The actual range of cosine distance values is -1 to 1, but this is a highly dimensional space, so distances tend
+  // to be compressed into this range.
+  const distanceThreshold = 0.85
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await hnswSearch(search_text, numberNeighbors, efArg)
+        const result = await hnswSearch(
+          search_text,
+          numberNeighbors,
+          efArg,
+          distanceThreshold,
+        )
         setThumbnails(result)
       } catch (error) {
         console.error(error)
@@ -50,14 +63,12 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
 
   const columns: Thumbnail[][] = [[], [], [], []]
   thumbnails.forEach((thumbnail, index) => {
+    // Note the ordering here is important: the most relevant results should be at the top of each column.
     columns[index % 4].push(thumbnail)
   })
 
   // Use the first element of each thumbnail as the key for the column
   const columnKeys = columns.map((column) => column[0].uuid)
-
-  // TODO Additionally, perhaps pressing escape should clear that state so that we remove the details component.
-  //      I had a ctrl + P example for doing shortcuts/button inputs like that somewhere.
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

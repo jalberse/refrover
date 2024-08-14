@@ -35,12 +35,14 @@ export async function hnswSearch(
   queryString: string,
   numberNeighbors: number,
   efArg: number,
+  distanceThreshold: number,
 ) {
   try {
     const fileUuids = await invoke<FileUuid[]>("search_images", {
       queryString,
       numberNeighbors,
       efArg,
+      distanceThreshold,
     })
 
     try {

@@ -10,14 +10,10 @@ const AssetDetails: React.FC = () => {
     (state) => state.detailsViewFileUuid,
   )
 
-  console.log("detailsViewFileUuid", detailsViewFileUuid)
-
   useEffect(() => {
     const fetchData = async () => {
       try {
         const result = await fetchMetadata(detailsViewFileUuid)
-
-        console.log("result", result)
 
         if (result) {
           setFileMetadata(result)

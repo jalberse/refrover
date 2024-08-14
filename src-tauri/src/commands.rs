@@ -20,6 +20,7 @@ pub async fn search_images<'a>(
         query_string: &str,
         number_neighbors: usize,
         ef_arg: usize,
+        distance_threshold: f32,
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
         tokenizer_state: tauri::State<'_, ClipTokenizerState>,
@@ -47,9 +48,9 @@ pub async fn search_images<'a>(
     let now = std::time::Instant::now();
     // Ensure ef_arg >= num_neighbors.
     let ef_arg = ef_arg.max(number_neighbors);
-    let search_results = hnsw.search(query_vector_slice, number_neighbors, ef_arg);
+    let search_results = hnsw.search(query_vector_slice, number_neighbors, ef_arg, distance_threshold);
     let elapsed = now.elapsed();
-    info!("Search took {:?} for {:?} neighbors with ef_ arg {:?}", elapsed, number_neighbors, ef_arg);
+    info!("Search took {:?} for {:?} neighbors with ef_ arg {:?} and distance threshold {:?}", elapsed, number_neighbors, ef_arg, distance_threshold);
 
     let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 

@@ -12,6 +12,7 @@ use anyhow::{Context, Ok};
 
 use diesel::{query_dsl::methods::SelectDsl, RunQueryDsl, SelectableHelper};
 use hnsw_rs::{hnsw::Hnsw, prelude::DistCosine};
+use log::info;
 use rustc_hash::FxHashMap;
 use tauri::{App, Manager};
 use uuid::Uuid;
@@ -111,7 +112,12 @@ impl<'a> HnswSearch<'a>
     /// it MUST be greater than number of neighbours asked (knbn) but CAN be less than DEFAULT_EF_CONSTRUCTION.
     /// As a rule of thumb could be between the number of neighbours we will ask for (knbn arg in search method) and DEFAULT_MAX_NB_CONNECTION.
     /// It does not limit the number of neighbours returned; recall will be lower if ef_arg is lower, but search is slower with high ef_arg.
-    pub fn search(&self, query: &[f32], knbn: usize, ef_arg: usize) -> Vec<(Uuid, f32)>
+    /// @param distance_threshold the value that the distance must be less than to be included in the results.
+    /// We use the cosine distance for our HNSW search.
+    /// Range of cosine distance is from 0 to 2, 0 — identical vectors, 1 — no correlation, 2 — absolutely different.
+    /// In practice, due to high-dimensional feature vectors, ~0.79 will be very semantically similar,
+    /// and ~0.85 will be very semantically different (this is a rough estimate, check for a given dataset).
+    pub fn search(&self, query: &[f32], knbn: usize, ef_arg: usize, distance_threshold: f32) -> Vec<(Uuid, f32)>
     {
         let knn_neighbours = self.hnsw.search(query, knbn, ef_arg);
         // Map the IDs to the UUIDs. Neighbor.d_id (short for data_id) corresponds to the usize ID.
@@ -123,6 +129,7 @@ impl<'a> HnswSearch<'a>
             {
                 (self.hnsw_id_to_file_id_map[&n.d_id], n.distance)
             })
+            .filter(|(_, distance)| *distance < distance_threshold)
             .collect();
         results
     }
