@@ -17,7 +17,7 @@ export const Gallery: React.FC<GalleryProps> = ({
 }
 
 const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
-  const [thumbnails, setThumbnails] = useState<Thumbnail[] | null>(null)
+  const [searchResults, setSearchResults] = useState<Thumbnail[] | null>(null)
   const setDetailsViewFileUuid = useRoverStore(
     (state) => state.setDetailsViewFileUuid,
   )
@@ -46,7 +46,7 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
           efArg,
           distanceThreshold,
         )
-        setThumbnails(result)
+        setSearchResults(result)
       } catch (error) {
         console.error(error)
       }
@@ -57,12 +57,12 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     })
   }, [search_text])
 
-  if (!thumbnails || thumbnails.length === 0) {
+  if (!searchResults || searchResults.length === 0) {
     return null
   }
 
   const columns: Thumbnail[][] = [[], [], [], []]
-  thumbnails.forEach((thumbnail, index) => {
+  searchResults.forEach((thumbnail, index) => {
     // Note the ordering here is important: the most relevant results should be at the top of each column.
     columns[index % 4].push(thumbnail)
   })
@@ -74,12 +74,12 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {columns.map((column, columnIndex) => (
         <div key={columnKeys[columnIndex]} className="grid gap-4">
-          {column.map((thumbnail) => (
+          {column.map((searchResultElem) => (
             <GalleryCard
-              key={thumbnail.uuid}
-              imageSrc={thumbnail.path}
+              key={searchResultElem.uuid}
+              imageSrc={searchResultElem.path}
               onClick={() => {
-                setDetailsViewFileUuid(thumbnail.file_uuid)
+                setDetailsViewFileUuid(searchResultElem.file_uuid)
               }}
             />
           ))}

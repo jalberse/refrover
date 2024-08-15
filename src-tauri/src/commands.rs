@@ -1,3 +1,4 @@
+use anyhow::Context;
 use log::info;
 use uuid::Uuid;
 
@@ -63,30 +64,35 @@ pub async fn search_images<'a>(
 /// The UUID is returns for React to map elements if necessary on a unique ID.
 /// Note that the UUID is *not* the file ID, but the UUID of the thumbnail.
 /// The filename is local to APPDATA.
+/// 
+/// If an error occurs fetching the thumbnail for a given UUID, that UUID will be omitted from the results.
+/// For this reason, use the file UUIDs in the Thumbnail objects, not the original set, when handling the results.
 #[tauri::command]
 pub async fn fetch_thumbnails(
         file_ids: Vec<String>,
         app_handle: tauri::AppHandle,
         pool_state: tauri::State<'_, ConnectionPoolState>
-    ) ->TAResult<Vec<Thumbnail>>
+    ) -> TAResult<Vec<Thumbnail>>
 {
-    let results: anyhow::Result<Vec<Thumbnail>> = file_ids.par_iter().map(
-        |file_id| {
-            let (thumbnail_uuid, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
-                Uuid::parse_str(&file_id)?,
-                &app_handle,
-                &pool_state
-            )?;
-            Ok(Thumbnail
-            {
-                uuid: ThumbnailUuid(thumbnail_uuid.to_string()),
-                file_uuid: FileUuid(file_id.to_string()),
-                path: thumbnail_filepath,
-            })
-        }
-    ).collect();
+    let results: Vec<Thumbnail> = file_ids.par_iter().map(
+            |file_id| {
+                let (thumbnail_uuid, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
+                    Uuid::parse_str(&file_id).context("Unable to parse file ID")?,
+                    &app_handle,
+                    &pool_state
+                )?;
+                Ok(Thumbnail
+                {
+                    uuid: ThumbnailUuid(thumbnail_uuid.to_string()),
+                    file_uuid: FileUuid(file_id.to_string()),
+                    path: thumbnail_filepath,
+                })
+            }
+        )
+        .filter_map(|x: anyhow::Result<Thumbnail> | x.ok())
+        .collect();
     
-    results.into_ta_result()
+    Ok(results)
 }
 
 /// Fetches the metadata for the given file ID
