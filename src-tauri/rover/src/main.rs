@@ -24,9 +24,8 @@ use tauri_plugin_log::LogTarget;
 
 #[cfg(debug_assertions)]
 const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
-// TODO - We probably want the log level for release to be WARN in reality.
 #[cfg(not(debug_assertions))]
-const LOG_LEVEL: LevelFilter = LevelFilter::Info;
+const LOG_LEVEL: LevelFilter = LevelFilter::Warn;
 
 fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
