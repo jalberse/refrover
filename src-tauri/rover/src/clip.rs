@@ -58,6 +58,9 @@ impl Clip
         //       It's advantageous to split these.
         //   We also definitely want to initiate the session once on startup and keep it around the whole process.
 
+        // TODO When we package the app, we'll be copying the ONNX files to be local to the executable.
+        //      That will change the path to the models (unless tauri is doing some magic with the path).
+        //      So, we should update these accordingly.
         let visual_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?

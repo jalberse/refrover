@@ -26,11 +26,6 @@ export async function fetchMetadata(fileUuid: string) {
 }
 
 // Performs a KNN search using the HNSW index to find the nearest neighbors for the given query string.
-//
-// Fetches the thumbnails for the set of files with the resulting file UUIDs.
-// If no thumbnail is available, it will be generated.
-// This may take some time to execute as thumbnails are generated and the search is performed.
-// We assume the caller knows the directory storing the thumbnails.
 export async function hnswSearch(
   queryString: string,
   numberNeighbors: number,
@@ -44,29 +39,36 @@ export async function hnswSearch(
       efArg,
       distanceThreshold,
     })
-
-    try {
-      const thumbnails = await invoke<Thumbnail[]>("fetch_thumbnails", {
-        fileIds: fileUuids,
-      })
-
-      const thumbnailFilepathsConverted: Thumbnail[] = thumbnails.map(
-        (thumbnail) => {
-          return {
-            uuid: thumbnail.uuid,
-            file_uuid: thumbnail.file_uuid,
-            path: convertFileSrc(thumbnail.path),
-          }
-        },
-      )
-
-      return thumbnailFilepathsConverted
-    } catch (error) {
-      console.error("Error fetching thumbnails:", error)
-      throw new Error("Failed to fetch thumbnails")
-    }
+    return fileUuids
   } catch (error) {
     console.error("Error fetching image UUIDs:", error)
     throw new Error("Failed to fetch image UUIDs")
+  }
+}
+
+// Fetches the thumbnails for the set of files with the resulting file UUIDs.
+// If no thumbnail is available, it will be generated.
+// This may take some time to execute as thumbnails are generated.
+// We assume the caller knows the directory storing the thumbnails.
+export async function fetchThumbnails(fileIds: FileUuid[]) {
+  try {
+    const thumbnails = await invoke<Thumbnail[]>("fetch_thumbnails", {
+      fileIds: fileIds,
+    })
+
+    const thumbnailFilepathsConverted: Thumbnail[] = thumbnails.map(
+      (thumbnail) => {
+        return {
+          uuid: thumbnail.uuid,
+          file_uuid: thumbnail.file_uuid,
+          path: convertFileSrc(thumbnail.path),
+        }
+      },
+    )
+
+    return thumbnailFilepathsConverted
+  } catch (error) {
+    console.error("Error fetching thumbnails:", error)
+    throw new Error("Failed to fetch thumbnails")
   }
 }

@@ -69,7 +69,7 @@ pub async fn search_images<'a>(
 /// For this reason, use the file UUIDs in the Thumbnail objects, not the original set, when handling the results.
 #[tauri::command]
 pub async fn fetch_thumbnails(
-        file_ids: Vec<String>,
+        file_ids: Vec<FileUuid>,
         app_handle: tauri::AppHandle,
         pool_state: tauri::State<'_, ConnectionPoolState>
     ) -> TAResult<Vec<Thumbnail>>
@@ -77,14 +77,14 @@ pub async fn fetch_thumbnails(
     let results: Vec<Thumbnail> = file_ids.par_iter().map(
             |file_id| {
                 let (thumbnail_uuid, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
-                    Uuid::parse_str(&file_id).context("Unable to parse file ID")?,
+                    Uuid::parse_str(&file_id.0).context("Unable to parse file ID")?,
                     &app_handle,
                     &pool_state
                 )?;
                 Ok(Thumbnail
                 {
                     uuid: ThumbnailUuid(thumbnail_uuid.to_string()),
-                    file_uuid: FileUuid(file_id.to_string()),
+                    file_uuid: FileUuid(file_id.0.to_string()),
                     path: thumbnail_filepath,
                 })
             }

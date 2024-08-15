@@ -26,10 +26,6 @@ export const Home: React.FC = () => {
   )
   const isDetailsViewOpen = detailsViewFileUuid !== ""
 
-  // TODO We want to (1) avoid style, and stick to tailwind classes
-  //      and (2) prevent the scrollbar from appearing at the top level.
-  //      We just want to scroll vertically within the gallery, or the detail pain if it's squished.
-
   return (
     <div className="flex flex-col bg-white">
       <Head>

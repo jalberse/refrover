@@ -1,9 +1,10 @@
 "use client"
 
 import useRoverStore from "@/hooks/store"
+import type FileUuid from "@/interfaces/FileUuid"
 import type Thumbnail from "@/interfaces/Thumbnail"
 import { useEffect, useState } from "react"
-import { hnswSearch } from "../api"
+import { fetchThumbnails, hnswSearch } from "../api"
 import GalleryCard from "./GalleryCard"
 
 interface GalleryProps {
@@ -11,18 +12,9 @@ interface GalleryProps {
 }
 
 export const Gallery: React.FC<GalleryProps> = ({
-  search_text,
+  search_text: searchText,
 }: GalleryProps) => {
-  return <GalleryContent search_text={search_text} />
-}
-
-const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
-  const [searchResults, setSearchResults] = useState<Thumbnail[] | null>(null)
-  const setDetailsViewFileUuid = useRoverStore(
-    (state) => state.setDetailsViewFileUuid,
-  )
-
-  // Reasonable defaults for the number of neighbors and efArg.
+  // Reasonable defaults for the number of neighbors and efArg for hnsw search
   // We can adjust these as needed for the user experience, including
   // cranking up the number of neighbors. Lag seems to be resulting from thumbnail loading
   // on the frontend, our HNSW search is very fast. We're addressing the lag in ROVER-116.
@@ -37,32 +29,59 @@ const GalleryContent: React.FC<{ search_text: string }> = ({ search_text }) => {
   // to be compressed into this range.
   const distanceThreshold = 0.85
 
+  const [searchResults, setSearchResults] = useState<FileUuid[] | null>(null)
+
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchSearchResults = async () => {
       try {
         const result = await hnswSearch(
-          search_text,
+          searchText,
           numberNeighbors,
           efArg,
           distanceThreshold,
         )
         setSearchResults(result)
       } catch (error) {
-        console.error(error)
+        console.error("Error fetching search results:", error)
       }
     }
 
-    fetchData().catch((error: unknown) => {
+    fetchSearchResults().catch((error: unknown) => {
       console.error(error)
     })
-  }, [search_text])
+  }, [searchText])
 
-  if (!searchResults || searchResults.length === 0) {
+  return searchResults ? <GalleryContent fileUuids={searchResults} /> : null
+}
+
+const GalleryContent: React.FC<{ fileUuids: FileUuid[] }> = ({ fileUuids }) => {
+  const [thumbnails, setThumbnails] = useState<Thumbnail[] | null>(null)
+
+  useEffect(() => {
+    const getThumbnails = async () => {
+      try {
+        const result = await fetchThumbnails(fileUuids)
+        setThumbnails(result)
+      } catch (error) {
+        console.error("Error fetching thumbnails:", error)
+      }
+    }
+
+    getThumbnails().catch((error: unknown) => {
+      console.error(error)
+    })
+  }, [fileUuids])
+
+  const setDetailsViewFileUuid = useRoverStore(
+    (state) => state.setDetailsViewFileUuid,
+  )
+
+  if (!thumbnails || thumbnails.length === 0) {
     return null
   }
 
   const columns: Thumbnail[][] = [[], [], [], []]
-  searchResults.forEach((thumbnail, index) => {
+  thumbnails.forEach((thumbnail, index) => {
     // Note the ordering here is important: the most relevant results should be at the top of each column.
     columns[index % 4].push(thumbnail)
   })
