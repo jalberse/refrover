@@ -52,6 +52,12 @@ export const Gallery: React.FC<GalleryProps> = ({
     })
   }, [searchText])
 
+  if (searchText !== "" && !searchResults) {
+    // Indicate that the empty results are due to actually not having any results, rather than a loading state.
+    // TODO - Once we have a marketplace, we can point them to it here.
+    return <div className="text-center">No results found</div>
+  }
+
   return searchResults ? <GalleryContent fileUuids={searchResults} /> : null
 }
 
