@@ -47,7 +47,7 @@ export const Home: React.FC = () => {
           direction="horizontal"
           style={{ height: "90%" }}
         >
-          <Panel>
+          <Panel id="Gallery" order={1}>
             <div className="flex-1 overflow-auto px-4 h-full">
               <Gallery search_text={query} />
             </div>
@@ -56,6 +56,8 @@ export const Home: React.FC = () => {
           {isDetailsViewOpen && (
             <>
               <Panel
+                id="Details"
+                order={2}
                 defaultSize={25}
                 className="flex-1 border-l-2 border-light-grey-900"
               >
