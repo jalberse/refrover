@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use image::{DynamicImage, GenericImageView, ImageBuffer};
+use image::{imageops, DynamicImage, GenericImageView, ImageBuffer, RgbaImage};
 
+use log::warn;
 use uuid::Uuid;
 
 use crate::{db, models::NewThumbnail, queries, state::ConnectionPoolState};
@@ -68,15 +69,48 @@ pub fn ensure_thumbnail_exists(
     let new_thumbnail_filename = format!("{}.webp", new_thumbnail_id);
     let new_thumbnail_full_path = app_data_path.join(&new_thumbnail_filename);
 
-    // TODO This does not handle EXIF rotation. We have a ROVER issue open regarding this, image may
-    // get a fix for it very soon as well.
-    // Though rather than waiting, this might be sufficient: https://docs.rs/kamadak-exif/latest/exif/
-
     // Create the thumbnail + save it.
     // We do expect the file to exist by this point, so it's an error if it doesn't.
     let file_path = queries::get_filepath(file_id, &mut connection)?.ok_or(anyhow::anyhow!("File not found for UUID {:?}", file_id))?;
-    let orig_image = image::open(file_path)?;
-    let thumbnail = thumbnail(&orig_image);
+
+    // Load exif data to determine image rotation, if applicable
+    let file = std::fs::File::open(&file_path)?;
+    let mut bufreader = std::io::BufReader::new(file);
+    let exifreader = exif::Reader::new();
+    let exif = exifreader.read_from_container(&mut bufreader)?;
+
+    // EXIF Rotation data is stored as a value 1-8, where:
+    // 1 = 0 degrees: the correct orientation, no adjustment is required.
+    // 2 = 0 degrees, mirrored: image has been flipped back-to-front.
+    // 3 = 180 degrees: image is upside down.
+    // 4 = 180 degrees, mirrored: image has been flipped back-to-front and is upside down.
+    // 5 = 90 degrees: image has been flipped back-to-front and is on its side.
+    // 6 = 90 degrees, mirrored: image is on its side.
+    // 7 = 270 degrees: image has been flipped back-to-front and is on its far side.
+    // 8 = 270 degrees, mirrored: image is on its far side.
+    //
+    // In our case, we assume that if there is no rotation data available or EXIF loading fails,
+    // that the image is in the correct orientation.
+    //
+    // Orientation is stored as a SHORT.  You could match `orientation.value`
+    // against `Value::Short`, but the standard recommends that readers
+    // should accept BYTE, SHORT, or LONG values for any unsigned integer
+    // field.  `Value::get_uint` is provided for that purpose.
+    let orientation = match exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY) {
+        Some(orientation) => {
+            let orientation = orientation.value.get_uint(0);
+            match orientation {
+                Some(v) => v,
+                None => 1,
+            }
+        },
+        None => 1,
+    };
+
+    // Load the image from the file 
+    let orig_image = image::open(&file_path)?;
+    let mut thumbnail = thumbnail(&orig_image);
+    fix_orientation(&mut thumbnail, orientation);
     thumbnail.save_with_format(new_thumbnail_full_path.clone(), image::ImageFormat::WebP)?;
 
     // Add the thumbnail to the thumbnails table.
@@ -95,4 +129,34 @@ pub fn ensure_thumbnail_exists(
         .to_string();
 
     Ok((new_thumbnail_id, full_path))
+}
+
+fn fix_orientation(image: &mut RgbaImage, orientation: u32) {
+    // TODO imageops doesn't support in-place rotation for every case -
+    //      maybe go make a pull request to add that functionality?
+    // TODO It would further be better to use matrix ops, as in:
+    //      https://magnushoff.com/articles/jpeg-orientation/
+    //      But that adds some complication interacting with the `image` crate.
+    match orientation
+    {
+        1 => {},
+        2 => imageops::flip_horizontal_in_place(image),
+        3 => imageops::rotate180_in_place(image),
+        4 => {
+            imageops::flip_vertical_in_place(image);
+        },
+        5 => {
+            *image = imageops::rotate90(image);
+            imageops::flip_horizontal_in_place(image);
+        },
+        6 => *image = imageops::rotate90(image),
+        7 => {
+            *image = imageops::rotate270(image);
+            imageops::flip_horizontal_in_place(image);
+        },
+        8 => *image = imageops::rotate270(image),
+        _ => {
+            warn!("Unsupported EXIF orientation: {}", orientation);
+        }
+    }
 }
