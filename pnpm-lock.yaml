@@ -35,6 +35,9 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      react-plock:
+        specifier: ^3.2.0
+        version: 3.2.0(react@18.3.1)
       react-resizable-panels:
         specifier: ^2.0.23
         version: 2.0.23(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2377,6 +2380,11 @@ packages:
 
   react-is@18.3.1:
     resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==}
+
+  react-plock@3.2.0:
+    resolution: {integrity: sha512-SH/1O6P8GdkjdzmgTb3G+Qb+yhVj14I3Xo1mSupPfA912j58Pb/iCYrhpUagYUS5oz3zx1E7+4cPTk2alLDZ3A==}
+    peerDependencies:
+      react: ^18.2.0
 
   react-resizable-panels@2.0.23:
     resolution: {integrity: sha512-8ZKTwTU11t/FYwiwhMdtZYYyFxic5U5ysRu2YwfkAgDbUJXFvnWSJqhnzkSlW+mnDoNAzDCrJhdOSXBPA76wug==}
@@ -5268,6 +5276,10 @@ snapshots:
   react-is@17.0.2: {}
 
   react-is@18.3.1: {}
+
+  react-plock@3.2.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   react-resizable-panels@2.0.23(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:

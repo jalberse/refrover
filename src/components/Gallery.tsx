@@ -4,6 +4,7 @@ import useRoverStore from "@/hooks/store"
 import type FileUuid from "@/interfaces/FileUuid"
 import type Thumbnail from "@/interfaces/Thumbnail"
 import { useEffect, useState } from "react"
+import { Masonry } from "react-plock"
 import { fetchThumbnails, hnswSearch } from "../api"
 import GalleryCard from "./GalleryCard"
 
@@ -80,30 +81,20 @@ const GalleryContent: React.FC<{ fileUuids: FileUuid[] }> = ({ fileUuids }) => {
     return null
   }
 
-  const columns: Thumbnail[][] = [[], [], [], []]
-  thumbnails.forEach((thumbnail, index) => {
-    // Note the ordering here is important: the most relevant results should be at the top of each column.
-    columns[index % 4].push(thumbnail)
-  })
-
-  // Use the first element of each thumbnail as the key for the column
-  const columnKeys = columns.map((column) => column[0].uuid)
-
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {columns.map((column, columnIndex) => (
-        <div key={columnKeys[columnIndex]} className="grid gap-4">
-          {column.map((searchResultElem) => (
-            <GalleryCard
-              key={searchResultElem.uuid}
-              imageSrc={searchResultElem.path}
-              onClick={() => {
-                setDetailsViewFileUuid(searchResultElem.file_uuid)
-              }}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
+    <Masonry
+      items={thumbnails}
+      config={{
+        columns: [1, 2, 3, 4],
+        gap: [24, 12, 6, 6],
+        media: [640, 768, 1024, 2048],
+      }}
+      render={(item) => (
+        <GalleryCard
+          imageSrc={item.path}
+          onClick={() => { setDetailsViewFileUuid(item.file_uuid); }}
+        />
+      )}
+    />
   )
 }
