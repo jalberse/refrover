@@ -78,7 +78,7 @@ const GalleryContent: React.FC<{ fileUuids: FileUuid[] }> = ({ fileUuids }) => {
   )
 
   if (!thumbnails || thumbnails.length === 0) {
-    return null
+    return <div />
   }
 
   return (
@@ -92,7 +92,9 @@ const GalleryContent: React.FC<{ fileUuids: FileUuid[] }> = ({ fileUuids }) => {
       render={(item) => (
         <GalleryCard
           imageSrc={item.path}
-          onClick={() => { setDetailsViewFileUuid(item.file_uuid); }}
+          onClick={() => {
+            setDetailsViewFileUuid(item.file_uuid)
+          }}
         />
       )}
     />

@@ -12,6 +12,10 @@ const GalleryCard: React.FC<GalleryCardProps> = ({ imageSrc, onClick }) => {
     }
   }
 
+  // TODO We may want to instead only open the details pane on double-click.
+  //      Single click could just select the image, and shift+click adds to selection.
+  //      This is important for dragging/copying images to reference programs.
+
   return (
     <div
       onClick={onClick}
@@ -20,6 +24,7 @@ const GalleryCard: React.FC<GalleryCardProps> = ({ imageSrc, onClick }) => {
     >
       <img
         src={imageSrc}
+        loading="lazy"
         alt="Gallery Thumbnail"
         className="h-auto max-w-full rounded-lg shadow-md"
         style={{ width: "100%" }}
