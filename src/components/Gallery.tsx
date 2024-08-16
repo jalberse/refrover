@@ -9,11 +9,11 @@ import { fetchThumbnails, hnswSearch } from "../api"
 import GalleryCard from "./GalleryCard"
 
 interface GalleryProps {
-  search_text: string
+  searchText: string
 }
 
 export const Gallery: React.FC<GalleryProps> = ({
-  search_text: searchText,
+  searchText,
 }: GalleryProps) => {
   // Reasonable defaults for the number of neighbors and efArg for hnsw search
   // We can adjust these as needed for the user experience, including

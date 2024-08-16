@@ -49,7 +49,7 @@ export const Home: React.FC = () => {
         >
           <Panel id="Gallery" order={1}>
             <div className="flex-1 overflow-auto px-4 h-full">
-              <Gallery search_text={query} />
+              <Gallery searchText={query} />
             </div>
           </Panel>
           <PanelResizeHandle />
