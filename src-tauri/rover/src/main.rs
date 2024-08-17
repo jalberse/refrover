@@ -3,12 +3,16 @@
     windows_subsystem = "windows"
 )]
 
+use std::process::exit;
+use std::process::ExitCode;
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use app::ann;
 use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
+use app::notify_handlers;
 use app::state::ClipState;
 use app::state::ClipTokenizerState;
 use app::state::ConnectionPoolState;
@@ -16,7 +20,10 @@ use app::state::InnerClipState;
 use app::state::InnerClipTokenizerState;
 use app::state::InnerConnectionPoolState;
 use app::state::InnerSearchState;
+use app::state::FsInnerWatcherState;
 use app::state::SearchState;
+use app::state::FsWatcherState;
+use log::error;
 use log::info;
 use log::LevelFilter;
 use tauri::Manager;
@@ -89,6 +96,21 @@ fn main() -> anyhow::Result<()> {
             info!("HNSW rebuild took {:?}", elapsed);
             info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
             info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
+
+            let fs_event_handler = notify_handlers::FsEventHandler {
+                app_handle: app.handle().clone(),
+            };
+            let watcher = notify::recommended_watcher(fs_event_handler);
+            match watcher {
+                Ok(watcher) => {
+                    let watcher_state = FsWatcherState(Mutex::new(FsInnerWatcherState { watcher }));
+                    app.manage(watcher_state);
+                },
+                Err(e) => {
+                    error!("Error initializing FS watcher: {:?}", e);
+                    return Err(anyhow::Error::new(e).into());
+                }
+            }
 
             Ok(())
         })

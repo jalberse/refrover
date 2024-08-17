@@ -40,3 +40,10 @@ pub struct InnerClipTokenizerState
 }
 
 pub struct ClipTokenizerState(pub Mutex<InnerClipTokenizerState>);
+
+pub struct FsInnerWatcherState
+{
+    pub watcher: notify::RecommendedWatcher,
+}
+
+pub struct FsWatcherState(pub Mutex<FsInnerWatcherState>);
