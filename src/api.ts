@@ -72,3 +72,23 @@ export async function fetchThumbnails(fileIds: FileUuid[]) {
     throw new Error("Failed to fetch thumbnails")
   }
 }
+
+export async function addWatchedDirectory(
+  directoryPath: string,
+  recursive: boolean,
+) {
+  try {
+    await invoke("add_watched_directory", {
+      directoryPath,
+      recursive,
+    })
+      .catch((error: unknown) => {
+        console.error("Error adding watched directory:", error)
+      })
+      .then(() => {
+        console.log("Successfully added watched directory")
+      })
+  } catch (error) {
+    console.error("Error adding watched directory:", error)
+  }
+}

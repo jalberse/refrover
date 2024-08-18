@@ -1,8 +1,10 @@
 use anyhow::Context;
 use log::info;
+use notify::{RecursiveMode, Watcher};
+use tauri::Manager;
 use uuid::Uuid;
 
-use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState};
+use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState};
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
 use imghdr;
@@ -168,4 +170,50 @@ pub async fn fetch_metadata(
     };
 
     Ok(metadata)
+}
+
+#[tauri::command]
+pub async fn add_watched_directory(
+    directory_path: String,
+    recursive: bool,
+    watcher_state: tauri::State<'_, FsWatcherState>,
+    clip_state: tauri::State<'_, ClipState>,
+    app_handle: tauri::AppHandle,
+) -> TAResult<()>
+{
+    // TODO Ensure that if the directory is already added, we don't add it again.
+    //      Consider recursive as well?
+
+    let directory_path = std::path::Path::new(&directory_path);
+
+    if !directory_path.is_dir() {
+        return Err(anyhow::anyhow!("Directory {:?} does not exist, or is not a directory", directory_path).into());
+    }
+
+    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), "D:\\refrover_photos", true).into_ta_result()?;
+
+    // TODO consider adding watcher last, at least after we've inserted the base dir.
+    //   otherwise it might start trying to add files to a base dir that doesn't exist, or query for
+    //   one that doesn't exist.
+    // TODO also, we probably need an index on the base dir path? So we can search for it.
+    //   OR we can somehow inform the FsEventHandler of some mapping of watched dirs to their IDs in some way
+    let watcher = &mut watcher_state.0.lock().unwrap().watcher;
+    let recursive_mode: RecursiveMode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
+    watcher.watch(directory_path, recursive_mode).into_ta_result()?;
+
+    println!("Added directory {:?}", directory_path);
+
+    // TODO We could test our FsEventHandler logic now. Probably do this first.
+    //      Just spoof adding a new watched directory (hardcode) and check out if logs/prints are working like I would expect
+    //      as we add/remove files/dirs from the watched directory.
+    //      Once that's working we can pretty confidently move forward.
+
+    // TODO Add the base directory to the DB.
+    // TODO If recursive, add all subdirectories to the DB.
+    // TODO And for each added directory... add its files in the directory to the DB.
+    // TODO And kick off encoding for those files, maybe in a new background thread?
+    //      clip_state is already in a Mutex, so we can lock it while we process.
+    //      As long as we don't block the main thread, we should be fine.
+    //      TODO - We might need it to be an Arc<Mutex> though, not just a Mutex.
+    Ok(())
 }

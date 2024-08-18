@@ -1,3 +1,4 @@
+import { addWatchedDirectory } from "@/api"
 import AssetDetails from "@/components/AssetDetails"
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
@@ -26,6 +27,13 @@ export const Home: React.FC = () => {
   )
   const isDetailsViewOpen = detailsViewFileUuid !== ""
 
+  // Create a callback function that calls addWatchedDirectory with a hardcoded directory path
+  // and a recursive flag of true.
+  // We'll call this with a button click
+  const addDirTest = useCallback(() => {
+    void addWatchedDirectory("D:\\refrover_photos", true)
+  }, [])
+
   return (
     <div className="flex flex-col bg-white">
       <Head>
@@ -47,6 +55,14 @@ export const Home: React.FC = () => {
           direction="horizontal"
           style={{ height: "90%" }}
         >
+          <Panel id="LeftPanel" order={0} defaultSize={25}>
+            <div className="flex-1 overflow-auto px-4 h-full">
+              <button onClick={addDirTest} type="button">
+                Add Directory
+              </button>
+            </div>
+          </Panel>
+          <PanelResizeHandle />
           <Panel id="Gallery" order={1}>
             <div className="flex-1 overflow-auto px-4 h-full">
               <Gallery searchText={query} />

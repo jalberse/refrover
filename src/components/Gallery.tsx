@@ -87,6 +87,8 @@ const GalleryContent: React.FC<{ fileUuids: FileUuid[] }> = ({ fileUuids }) => {
     return <div />
   }
 
+  // TODO We may need to provide unique keys - react-plock *should* have some way to manage that
+  //      so we can pass in the file_uuids.
   return (
     <Masonry
       items={thumbnails}

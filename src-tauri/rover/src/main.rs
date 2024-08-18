@@ -118,6 +118,7 @@ fn main() -> anyhow::Result<()> {
             app::commands::search_images,
             app::commands::fetch_thumbnails,
             app::commands::fetch_metadata,
+            app::commands::add_watched_directory,
             ])
         .run(tauri::generate_context!())?;
 

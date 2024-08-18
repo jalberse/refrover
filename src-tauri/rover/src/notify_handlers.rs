@@ -11,6 +11,7 @@ pub struct FsEventHandler
     pub app_handle: tauri::AppHandle,
 }
 
+// TODO We want to use notify_debouncer_full instead. It's for ease of use.
 impl notify::EventHandler for FsEventHandler {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
         match event {
@@ -37,6 +38,14 @@ impl FsEventHandler {
         //      while the app *isn't* open, though, and I'm not sure we *could* do that.
         //      (how would we check against old data/names that we don't have access to?)
         match event.kind {
+            // TODO If we add or remove a file or directory, we only get Any kinds of events.
+            //      Maybe that's just what's available on Windows? Are other OSes different?
+            //      I mean, we can check the path to see the filetype etc, it's fine.
+            //      I guess that we could by default just not match on CreateKind or RemoveKind,
+            //      just send the event paths to the appropriate functions and check ourselves?
+            // TODO and how to handle multiple paths? Docs mention renames, but just for add/create
+            //      I assume it's just the one path? We can check with some logging, but also
+            //      hunt down more documentation on what to expect.
             notify::EventKind::Create(create_kind) => {
                 match create_kind {
                     CreateKind::File => {
