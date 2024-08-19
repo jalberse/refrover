@@ -84,6 +84,10 @@ fn main() -> anyhow::Result<()> {
 
             let pool_state = app.state::<ConnectionPoolState>();
 
+            // TODO I had to re-run because I updated the migrations to add an index, but now we fail with an image.
+            //      Possibly due to new files (like PDFs) and folders and stuff I added while testing the watched directory feature.
+            //      So, it's a possibility for improving our error handling! Investigate that,
+            //      re-run in debug mode.
             db::init(&pool_state, populate_dummy_data)?;
 
             // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
