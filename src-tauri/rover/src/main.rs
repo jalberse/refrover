@@ -34,6 +34,8 @@ const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 #[cfg(not(debug_assertions))]
 const LOG_LEVEL: LevelFilter = LevelFilter::Warn;
 
+const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
+
 fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_persisted_scope::init())
@@ -100,7 +102,7 @@ fn main() -> anyhow::Result<()> {
             let fs_event_handler = notify_handlers::FsEventHandler {
                 app_handle: app.handle().clone(),
             };
-            let watcher = notify::recommended_watcher(fs_event_handler);
+            let watcher = notify_debouncer_full::new_debouncer(FS_WATCHER_DEBOUNCER_DURATION, None, fs_event_handler);
             match watcher {
                 Ok(watcher) => {
                     let watcher_state = FsWatcherState(Mutex::new(FsInnerWatcherState { watcher }));

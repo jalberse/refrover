@@ -1,95 +1,55 @@
 
 use log::{info, warn};
-use notify;
-use notify::event::{CreateKind, RemoveKind};
+use notify_debouncer_full::{notify::EventKind, DebounceEventResult, DebouncedEvent};
 
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
-/// During the .setup() we set up a FsEventHandler with the app handle, use it to create a watcher,
-/// and then store that watcher in the FsWatcherState. This ensures that the watcher/handler are kept alive.
 pub struct FsEventHandler
 {
     pub app_handle: tauri::AppHandle,
 }
 
-// TODO We want to use notify_debouncer_full instead. It's for ease of use.
-impl notify::EventHandler for FsEventHandler {
-    fn handle_event(&mut self, event: notify::Result<notify::Event>) {
-        match event {
-            Ok(event) => {
-                Self::handle_event_inner(event);    
-            }
-            Err(e) => {
-                println!("watch error: {:?}", e);
-            }
+impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
+    fn handle_event(&mut self, result: DebounceEventResult) {
+        match result {
+            Ok(results) => {
+                info!("Handling events: {:?}", results);
+
+                for event in results {
+                    Self::handle_event_inner(event);
+                }
+            },
+            Err(e) => warn!("Error handling event: {:?}", e),
         }
     }
 }
 
 impl FsEventHandler {
-    fn handle_event_inner(event: notify::Event) {
-        // Handle the various kinds of events that can occur.
-        // Notice that we are chiefly concerned with the `Create` and `Remove` kinds,
-        // and then creating/removing files/directories within those kinds.
-        // Other cases may include things such as mounting/unmounting a filesystem,
-        // which we will choose to not handle here for now. We may in the future! 
-        // TODO Consider handling the Rename and DataModified kinds for EventKind::Modifty.
-        //      Those might actually be nice to include, so users could edit photos or rename them
-        //      and we could update them in the DB. We'd need to consider rename/data changes
-        //      while the app *isn't* open, though, and I'm not sure we *could* do that.
-        //      (how would we check against old data/names that we don't have access to?)
+    fn handle_event_inner(debounced_event: DebouncedEvent) {
+        let event = debounced_event.event;
         match event.kind {
-            // TODO If we add or remove a file or directory, we only get Any kinds of events.
-            //      Maybe that's just what's available on Windows? Are other OSes different?
-            //      I mean, we can check the path to see the filetype etc, it's fine.
-            //      I guess that we could by default just not match on CreateKind or RemoveKind,
-            //      just send the event paths to the appropriate functions and check ourselves?
-            // TODO and how to handle multiple paths? Docs mention renames, but just for add/create
-            //      I assume it's just the one path? We can check with some logging, but also
-            //      hunt down more documentation on what to expect.
-            notify::EventKind::Create(create_kind) => {
-                match create_kind {
-                    CreateKind::File => {
-                        info!("New file created: {:?}", event.paths);
-                        todo!();
-                    }
-                    CreateKind::Folder => {
-                        info!("New directory created: {:?}", event.paths);
-                        todo!();
-                    }
-                    CreateKind::Any => {
-                        warn!("Unhandled create kind: {:?}", create_kind);
-                    }
-                    CreateKind::Other => {
-                        warn!("Unhandled create kind: {:?}", create_kind);
-                    },
-                }
-            }
-            notify::EventKind::Any => { },
-            notify::EventKind::Access(_) => { },
-            notify::EventKind::Modify(_) => { },
-            notify::EventKind::Remove(remove_kind) => {
-                match remove_kind {
-                    RemoveKind::File => {
-                        info!("Event: File removed: {:?}", event.paths);
-                        todo!();
-                    },
-                    RemoveKind::Folder => {
-                        info!("Event: Folder removed: {:?}", event.paths);
-                        todo!();
-                    },
-                    RemoveKind::Any => { warn!("Unhandled remove kind: {:?}", remove_kind); },
-                    RemoveKind::Other => { warn!("Unhandled remove kind: {:?}", remove_kind); },
-                }
-            },
-            notify::EventKind::Other => {},
+            // TODO We'll ignore EventKind::Any for now, since we don't have enough information. Do a warn!() in that case with the event data.
+            //      We can collect that from logs to see if we need to handle. True for any unhandled case.
+            EventKind::Any => info!("EventKind::Any: {:?}", event),
+            // TODO We will intentionally ignore Access events
+            EventKind::Access(_) => info!("EventKind::Access: {:?}", event),
+            // TODO We should indeed handle create events, duh. If it's a directory, we should add it to the watcher, and do recursion ourselves on added files/dirs.
+            //      We don't want recursive watching due to how Remove() will eg only remove the top level dir. We watch one level deep, and handle the recursive bits ourselves. 
+            EventKind::Create(_) => info!("EventKind::Create: {:?}", event),
+            // TODO Ignore Modify::Any and Modify::Metadata for now.
+            //      Modify::Any triggers after a Create when copying files, so we wouldn't want to re-do any work.
+            //      Do a remove/add cycle for Modify::Data. Some programs e.g. Clip Studio Paint will actually make a Remove/Create pair when overwriting data,
+            //        rather than triggering a Modify::Data event. But in case some program/process *does* directly modify the data, we can similarly just handle it
+            //        by treating it as we would a Remove/Create pair.
+            // . Also handle Modify::Name.
+            EventKind::Modify(_) => info!("EventKind::Modify: {:?}", event),
+            // TODO Handle the remove event. For dirs, we won't worry about recursion - any internal dir should have its own watcher.
+            //      Wait, would watchers have a race condition? Hmmm. That sucks lol.
+            EventKind::Remove(_) => info!("EventKind::Remove: {:?}", event),
+            // TODO Just like Any, just warn!() for now...
+            EventKind::Other => info!("EventKind::Other: {:?}", event),
         }
     }
 
-    // TODO Create each of these functions, and just print out some details for now.
-    //      Then do a bit of frontend work to test them out.
-    //      Starting with, I suppose, the ability
-    //      to add a watched directory, which will call a command that adds the watched dir to the watcher
-    //      in the app state.
     //      Then once we're actually watching some dirs, we can create/remove files and folders
     //      and check that we get those events as we'd expect.
 

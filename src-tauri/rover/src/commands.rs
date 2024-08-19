@@ -1,6 +1,6 @@
 use anyhow::Context;
 use log::info;
-use notify::{RecursiveMode, Watcher};
+use notify_debouncer_full::notify::{RecursiveMode, Watcher};
 use tauri::Manager;
 use uuid::Uuid;
 
@@ -197,9 +197,9 @@ pub async fn add_watched_directory(
     //   one that doesn't exist.
     // TODO also, we probably need an index on the base dir path? So we can search for it.
     //   OR we can somehow inform the FsEventHandler of some mapping of watched dirs to their IDs in some way
-    let watcher = &mut watcher_state.0.lock().unwrap().watcher;
+    let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
     let recursive_mode: RecursiveMode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
-    watcher.watch(directory_path, recursive_mode).into_ta_result()?;
+    watcher_debouncer.watcher().watch(directory_path, recursive_mode).into_ta_result()?;
 
     println!("Added directory {:?}", directory_path);
 

@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use diesel::{r2d2::{ConnectionManager, Pool, PooledConnection}, SqliteConnection};
 use instant_clip_tokenizer;
+use notify_debouncer_full::{notify::RecommendedWatcher, FileIdMap};
 
 use crate::{ann::HnswSearch, clip::Clip};
 
@@ -43,7 +44,7 @@ pub struct ClipTokenizerState(pub Mutex<InnerClipTokenizerState>);
 
 pub struct FsInnerWatcherState
 {
-    pub watcher: notify::RecommendedWatcher,
+    pub watcher: notify_debouncer_full::Debouncer<RecommendedWatcher, FileIdMap>,
 }
 
 pub struct FsWatcherState(pub Mutex<FsInnerWatcherState>);
