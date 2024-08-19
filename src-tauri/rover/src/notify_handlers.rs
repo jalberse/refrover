@@ -1,6 +1,6 @@
 
 use log::{info, warn};
-use notify_debouncer_full::{notify::EventKind, DebounceEventResult, DebouncedEvent};
+use notify_debouncer_full::{notify::{event::{ModifyKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
 pub struct FsEventHandler
@@ -11,11 +11,36 @@ pub struct FsEventHandler
 impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
     fn handle_event(&mut self, result: DebounceEventResult) {
         match result {
-            Ok(results) => {
-                info!("Handling events: {:?}", results);
+            Ok(events) => {
+                // Events are be stored in the following order:
+                // 1. `remove` or `move out` event
+                // 2. `rename` event.
+                // 3. Other events
 
-                for event in results {
-                    Self::handle_event_inner(event);
+                // TODO Maybe an Option<RenameFrom> event that gets passed for each.
+                //      It functions as a 1-sized-stack.
+                //      Populate it with the RenameFrom when we encounter a FROM event.
+                //      When we encounter a TO event, we "pop the stack" and use that to handle the event (ie know the old path).
+                //      If there's a missing FROM event whenw we get a TO event, that's an error.
+                //      If we're done processing events, that's an error.
+                //      If we get two FROM events in a row, that's an error.
+                //      We expect FROM/TO pairs follow one after the other in pairs. notify-debouncer-full should ensure this.
+                //      TODO - I'm not 100% sure on this, because there are 
+                // Thankfully other events can be handled individually, with notify-debouncer-full ensuring they're in a reasonable order
+
+                let mut rename_from: Option<DebouncedEvent> = None;
+
+                // TODO Note RenameMode::Both and RenameMode::Other are not used by notify-debouncer-full - check out the impl, they say so and intentionally ignore.
+                //         (which I... kind of don't like? I assume they have a good reason though)
+                //    eg rename "ANY" would have both paths according to docs:
+                //    "The order of the paths is likely to be significant! For example, renames where both ends of
+                //    the name change are known will have the "source" path first, and the "target" path last.""
+                //    But the FROM/TO will have just the one path each, which we'll handle as explained above.
+
+                info!("Handling events: {:?}", events);
+
+                for event in events {
+                    Self::handle_event_inner(event, &mut rename_from);
                 }
             },
             Err(e) => warn!("Error handling event: {:?}", e),
@@ -24,7 +49,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
 }
 
 impl FsEventHandler {
-    fn handle_event_inner(debounced_event: DebouncedEvent) {
+    fn handle_event_inner(debounced_event: DebouncedEvent, rename_from: &mut Option<DebouncedEvent>) {
         let event = debounced_event.event;
         match event.kind {
             // TODO We'll ignore EventKind::Any for now, since we don't have enough information. Do a warn!() in that case with the event data.
