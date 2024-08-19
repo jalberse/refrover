@@ -84,11 +84,19 @@ fn main() -> anyhow::Result<()> {
 
             let pool_state = app.state::<ConnectionPoolState>();
 
-            // TODO I had to re-run because I updated the migrations to add an index, but now we fail with an image.
-            //      Possibly due to new files (like PDFs) and folders and stuff I added while testing the watched directory feature.
-            //      So, it's a possibility for improving our error handling! Investigate that,
-            //      re-run in debug mode.
-            db::init(&pool_state, populate_dummy_data)?;
+            // TODO There was a crash here in release but I can't reproduce it now.
+            //      I don't *think* it was DB contention since I fixed that earlier.
+            //      Since this is temp code getting replaced by watched directories, let's table it and
+            //      see if any issues pop up in the new more production suitable way of populating 
+            //      the encodings table.
+            let init_db_result = db::init(&pool_state, populate_dummy_data);
+            match init_db_result {
+                Ok(_) => {},
+                Err(e) => {
+                    error!("Error initializing DB: {:?}", e);
+                    return Err(e.into());
+                }
+            }
 
             // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
             tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
