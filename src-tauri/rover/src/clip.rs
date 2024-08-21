@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
-use ort::{self, inputs, GraphOptimizationLevel};
+use ort::{self, inputs, CPUExecutionProvider, GraphOptimizationLevel};
 use ort::DirectMLExecutionProvider;
 use anyhow;
 
@@ -73,10 +73,11 @@ impl Clip
             .with_execution_providers([DirectMLExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_transformer.onnx"))?;
 
+        // TODO See ROVER-37.
         let forward_session = ort::Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
-            .with_execution_providers([DirectMLExecutionProvider::default().build()])?
+            .with_execution_providers([CPUExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px.onnx"))?;
 
         Ok( Clip { visual_session, text_session, forward_session } )
