@@ -10,6 +10,7 @@ use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use image::DynamicImage;
+use log::info;
 use ndarray::Array2;
 use uuid::Uuid;
 
@@ -52,16 +53,27 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
 pub fn get_connection_pool() -> anyhow::Result<Pool<ConnectionManager<SqliteConnection>>> {
     let db_path = get_db_path()?;
 
+    // Ensure the db file exists at the path.
+    // This doesn't run the migrations, we just ensure the file exists.
+    if !Path::new(&db_path).exists() {
+        SqliteConnection::establish(&db_path)?;
+    }
+
     let manager = ConnectionManager::<SqliteConnection>::new(db_path);
 
-    Ok(Pool::builder()
+    let result = Pool::builder()
         .test_on_check_out(true)
         .connection_customizer(Box::new(ConnectionOptions {
             enable_wal: true,
             enable_foreign_keys: true,
             busy_timeout: Some(Duration::from_secs(BUSY_TIMEOUT_SECONDS)),
         }))
-        .build(manager)?)
+        .build(manager);
+
+    match result {
+        Ok(pool) => Ok(pool),
+        Err(e) => Err(anyhow::anyhow!("Error creating connection pool: {:?}", e)),
+    }
 }
 
 pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_data: bool) -> anyhow::Result<()> {
@@ -90,12 +102,19 @@ fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow:
     anyhow::Ok(())
 }
 
+/// Gets the path to the SQLite database file.
+/// Ensures that its parent directory exists.
+/// The DB file may not exist yet; this function just gets the path.
+/// Call diesel's `*Connection::establish()` to ensure the file exists.
 fn get_db_path() -> anyhow::Result<String> {
     // TODO Pick a better spot for this, possibly in the app data directory?
     let home_dir = dirs::home_dir().ok_or(anyhow::anyhow!("Unable to get home directory"))?;
-    Ok(home_dir.to_str()
+    let path = home_dir.to_str()
         .ok_or(anyhow::anyhow!("Unable to convert home directory PathBuf to string"))?
-        .to_string() + "/.config/refrover/sqlite.refrover.db")
+        .to_string() + "/.config/refrover/sqlite.refrover.db";
+    // Ensure the directory exists.
+    fs::create_dir_all(Path::new(&path).parent().ok_or(anyhow::anyhow!("Error getting parent directory"))?)?;
+    Ok(path)
 }
 
 fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()>
