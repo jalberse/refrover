@@ -81,7 +81,7 @@ impl FsEventHandler {
         }
     }
 
-    fn handle_modify_event(debounced_event: &DebouncedEvent, modify_event_kind: ModifyKind, rename_from: &mut Option<DebouncedEvent>) 
+    fn handle_modify_event(debounced_event: &DebouncedEvent, modify_event_kind: ModifyKind, last_rename_from: &mut Option<DebouncedEvent>) 
     {
         match modify_event_kind {
             ModifyKind::Any => todo!(),
@@ -90,16 +90,17 @@ impl FsEventHandler {
             ModifyKind::Name(modify_name_kind) => {
                 // "Both" and "Other" should not be emitted by notify-debouncer-full, so we'll log an error and ignore such events.
                 match modify_name_kind {
-                    // TODO I think that with RenameMode::Any, we should be able to get the old and new paths in the one event together.
-                    //      The documentation seems to suggest so. Code that assumption in, log an error msg if it's violated and ignore the event.
-                    
-                    RenameMode::Any => todo!(),
+                    RenameMode::Any => {
+                        // TODO I think that with RenameMode::Any, we should be able to get the old and new paths in the one event together.
+                        // The documentation seems to suggest so. Code that assumption in, log an error msg if it's violated and ignore the event.
+                        todo!()
+                    },
                     RenameMode::To => {
-                        if rename_from.is_none() {
+                        if last_rename_from.is_none() {
                             error!("RenameMode::To event without a RenameMode::From event: {:?}", debounced_event);
                             return;
                         }
-                        let rename_from_event = rename_from.take().unwrap();
+                        let rename_from_event = last_rename_from.take().unwrap();
                         // TODO Use the rename_from event to get the "from" path, and the debounced_event to get the "to" path.
                         //   We can rename the file in the DB using that information - index on the name.                
                         //    The path is the absolute path, so we can grab that via some Rust code (like, "get the directory containing the thing at the end of the path")
@@ -108,11 +109,11 @@ impl FsEventHandler {
                         // Also, I think we really only need to update the name in the files table. The ID and encodings etc should be fine...
                     },
                     RenameMode::From => {
-                        if rename_from.is_some() {
+                        if last_rename_from.is_some() {
                             error!("RenameMode::From event with a RenameMode::From event already present: {:?}", debounced_event);
                             return;
                         }
-                        *rename_from = Some(debounced_event.clone());
+                        *last_rename_from = Some(debounced_event.clone());
                         // We don't do any further processing here; we should process a matching RenameMode::To event next. 
                     },
                     RenameMode::Both => error!("Unexpected Event RenameMode::Both"),
