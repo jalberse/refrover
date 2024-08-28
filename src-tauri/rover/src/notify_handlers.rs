@@ -28,7 +28,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                 //      TODO - I'm not 100% sure on this, because there are 
                 // Thankfully other events can be handled individually, with notify-debouncer-full ensuring they're in a reasonable order
 
-                let mut rename_from: Option<DebouncedEvent> = None;
+                let mut last_rename_from: Option<DebouncedEvent> = None;
 
                 // TODO Note RenameMode::Both and RenameMode::Other are not used by notify-debouncer-full - check out the impl, they say so and intentionally ignore.
                 //         (which I... kind of don't like? I assume they have a good reason though)
@@ -39,7 +39,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                 info!("Handling events: {:?}", events);
 
                 for event in events {
-                    Self::handle_event_inner(&event, &mut rename_from);
+                    Self::handle_event_inner(&event, &mut last_rename_from);
                 }
             },
             Err(e) => warn!("Error handling event: {:?}", e),
@@ -48,7 +48,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
 }
 
 impl FsEventHandler {
-    fn handle_event_inner(debounced_event: &DebouncedEvent, rename_from: &mut Option<DebouncedEvent>) {
+    fn handle_event_inner(debounced_event: &DebouncedEvent, last_rename_from: &mut Option<DebouncedEvent>) {
         let event = &debounced_event.event;
         // TODO Don't get the basedir here necessarily (since different events could have multiple paths etc...) but we should have a fn that
         //      takes the path and gets the base directory for it.
@@ -71,7 +71,7 @@ impl FsEventHandler {
             //   rename FROM will just add to the Option<Event> "stack". If it's occupied, that's an error.
             //    rename TO will pop the stack and use the old path to handle the event. If there's no from, that's an error.
             EventKind::Modify(modify_event_kind) => {
-                Self::handle_modify_event(debounced_event, modify_event_kind, rename_from)
+                Self::handle_modify_event(debounced_event, modify_event_kind, last_rename_from)
             },
             // TODO Handle the remove event. For dirs, we won't worry about recursion - any internal dir should have its own watcher.
             //      Wait, would watchers have a race condition? Hmmm. That sucks lol.
