@@ -14,7 +14,6 @@ use diesel::sql_types::Integer;
 
 use crate::models::{ImageFeatureVitL14336Px, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
 
-
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
 {
    // See https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
@@ -565,6 +564,50 @@ pub fn get_filepath(file_id: Uuid, connection: &mut SqliteConnection) -> anyhow:
          Ok(Some(base_dir.join(rel_path)))
       }
    }
+}
+
+pub fn get_base_dir_id(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
+{
+   use crate::schema::base_directories;
+
+   let base_dir_id: Option<String> = base_directories::table
+      .select(base_directories::id)
+      .filter(base_directories::path.eq(base_dir))
+      .first(connection)
+      .optional()?;
+
+   match base_dir_id {
+      Some(base_dir_id) => Ok(Some(Uuid::parse_str(&base_dir_id)?)),
+      None => Ok(None)
+   }
+}
+
+pub fn get_file_id_from_base_dir_and_relative_path(base_dir: &Uuid, rel_path: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
+{
+   use crate::schema::files;
+
+   let file_id: Option<String> = files::table
+      .select(files::id)
+      .filter(files::base_directory_id.eq(base_dir.to_string()))
+      .filter(files::relative_path.eq(rel_path))
+      .first(connection)
+      .optional()?;
+
+   match file_id {
+      Some(file_id) => Ok(Some(Uuid::parse_str(&file_id)?)),
+      None => Ok(None)
+   }
+}
+
+pub fn update_filename(file_id: &Uuid, new_filename: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::files;
+
+   diesel::update(files::table.filter(files::id.eq(file_id.to_string())))
+      .set(files::relative_path.eq(new_filename))
+      .execute(connection)?;
+
+   Ok(())
 }
 
 #[cfg(test)]

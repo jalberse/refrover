@@ -12,3 +12,5 @@ mod thumbnails;
 mod junk_drawer;
 mod interface;
 pub mod notify_handlers;
+
+use error::Error;
