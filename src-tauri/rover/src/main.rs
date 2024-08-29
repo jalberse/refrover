@@ -84,11 +84,7 @@ fn main() -> anyhow::Result<()> {
 
             let pool_state = app.state::<ConnectionPoolState>();
 
-            // TODO There was a crash here in release but I can't reproduce it now.
-            //      I don't *think* it was DB contention since I fixed that earlier.
-            //      Since this is temp code getting replaced by watched directories, let's table it and
-            //      see if any issues pop up in the new more production suitable way of populating 
-            //      the encodings table.
+            
             let init_db_result = db::init(&pool_state, populate_dummy_data);
             match init_db_result {
                 Ok(_) => {},
@@ -101,6 +97,8 @@ fn main() -> anyhow::Result<()> {
             // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
             tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
 
+            
+
             // We rebuild every time the app launches; it is fast enough, and it handles the fact that
             // we can't remove elements from the HNSW index.
             info!("Populating HNSW index...");
@@ -110,6 +108,11 @@ fn main() -> anyhow::Result<()> {
             info!("HNSW rebuild took {:?}", elapsed);
             info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
             info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
+
+            // TODO We need a table that stores the watched directories.
+            //      We need to populate the front-end with them,
+            //      and create watchers for them.
+            //      Right now it's hardcoded to D:\refrover_photos that gets added on click.
 
             let fs_event_handler = notify_handlers::FsEventHandler {
                 app_handle: app.handle().clone(),

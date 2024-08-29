@@ -12,7 +12,7 @@ pub const IMAGE_INPUT_SIZE: usize = 336;
 pub const CONTEXT_LENGTH: usize = 77;
 pub const FEATURE_VECTOR_LENGTH: usize = 768;
 
-pub fn load_image_batch(paths: &Vec<(Uuid, PathBuf)>) -> Vec<(Uuid, anyhow::Result<Box<DynamicImage>>)>
+pub fn load_image_batch(paths: &[(Uuid, PathBuf)]) -> Vec<(Uuid, anyhow::Result<Box<DynamicImage>>)>
 {
 	// Load the images in parallel
 	let images = paths.par_iter().map(

@@ -10,7 +10,6 @@ use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use image::DynamicImage;
-use log::info;
 use ndarray::Array2;
 use uuid::Uuid;
 
@@ -331,6 +330,7 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
         .select((schema::files::dsl::id, path, relative_path))
         .load::<(String, String, String)>(connection)?;
 
+    // TODO call clip::encode_image_files() instead. This is all temporary code anyways I guess but still... 
     for chunk in all_files.chunks(64)
     {
         // Get a vec of pathbufs to images
@@ -351,17 +351,7 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
         let images: Vec<(Uuid, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.unwrap())).collect();
         let resized_images = preprocessing::resize_images(images);
         let image_clip_input = preprocessing::image_to_clip_format(resized_images);
-        // TODO There's occasionally a crash when encoding (e.g. after 308 images).
-        // [2024-08-29][04:03:35][ERROR][app] Error initializing DB: Failed to run inference on model:
-        // D:\a\ort-artifacts-staging\ort-artifacts-staging\onnxruntime\onnxruntime\core\providers\dml\DmlExecutionProvider\src\DmlCommandRecorder.cpp(371)\RefRover.exe!00007FF75F5AACCD:
-        // (caller: 00007FF75F4E30A6) Exception(1) tid(3188) 887A0006 The GPU will not respond to more commands, most likely because of an invalid command passed by the calling application.
-        //      Since this is temp code getting replaced by watched directories, let's table it and
-        //      see if any issues pop up in the new more production suitable way of populating 
-        //      the encodings table.
-        // Why this isn't just being dumped into our failed_encodings table?
-        // Oh, because our failed encodings are really only getting handled for those that just fail loading.
-        //      I suppose we'd want to further validate and strip invalid inputs?
-        // The crash only seems to happen *occasionally* though. Why?
+
         let image_encodings: Array2<f32> = clip.encode_image(image_clip_input)?;
 
         // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
@@ -375,7 +365,7 @@ fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -
         // The ID of the encoding is the same as the file ID.
         let new_image_features: Vec<NewImageFeaturesVitL14336Px> = chunk.iter().zip(serialized_encodings.iter()).map(|((file_id, _, _), encoding)| {
             NewImageFeaturesVitL14336Px {
-                id: file_id,
+                id: file_id.to_string(),
                 feature_vector: encoding
             }
         }).collect();

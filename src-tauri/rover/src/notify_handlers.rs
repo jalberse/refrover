@@ -1,12 +1,15 @@
 
 use std::path::PathBuf;
 
-use diesel::SqliteConnection;
-use log::{error, info, warn};
-use notify_debouncer_full::{notify::{event::{ModifyKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
+use diesel::RunQueryDsl;
+use image::DynamicImage;
+use log::{error, info};
+use ndarray::Array2;
+use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
+use uuid::Uuid;
 
-use crate::{error::Error, queries, state::ConnectionPoolState};
+use crate::{error::Error, models::{NewFailedEncoding, NewImageFeaturesVitL14336Px}, preprocessing, queries, state::{ClipState, ConnectionPoolState}};
 
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
 pub struct FsEventHandler
@@ -16,9 +19,6 @@ pub struct FsEventHandler
 
 impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
     fn handle_event(&mut self, result: DebounceEventResult) {
-        let connection_pool_state = self.app_handle.state::<ConnectionPoolState>();
-        let mut connection = connection_pool_state.get_connection().expect("Unable to get connection from pool");
-
         match result {
             Ok(events) => {
                 // Events are be stored in the following order:
@@ -26,33 +26,31 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                 // 2. `rename` event.
                 // 3. Other events
 
-                // TODO Maybe an Option<RenameFrom> event that gets passed for each.
-                //      It functions as a 1-sized-stack.
-                //      Populate it with the RenameFrom when we encounter a FROM event.
-                //      When we encounter a TO event, we "pop the stack" and use that to handle the event (ie know the old path).
-                //      If there's a missing FROM event whenw we get a TO event, that's an error.
-                //      If we're done processing events, that's an error.
-                //      If we get two FROM events in a row, that's an error.
-                //      We expect FROM/TO pairs follow one after the other in pairs. notify-debouncer-full should ensure this.
-                //      TODO - I'm not 100% sure on this, because there are 
-                // Thankfully other events can be handled individually, with notify-debouncer-full ensuring they're in a reasonable order
-
+                // Acts as a one-element-stack for the last `rename from` event,
+                // so that the following `rename to` event can be processed.
                 let mut last_rename_from: Option<DebouncedEvent> = None;
-
-                // TODO Note RenameMode::Both and RenameMode::Other are not used by notify-debouncer-full - check out the impl, they say so and intentionally ignore.
-                //         (which I... kind of don't like? I assume they have a good reason though)
-                //    eg rename "ANY" would have both paths according to docs:
-                //    "The order of the paths is likely to be significant! For example, renames where both ends of
-                //    the name change are known will have the "source" path first, and the "target" path last.""
-                //    But the FROM/TO will have just the one path each, which we'll handle as explained above.
-                info!("Handling events: {:?}", events);
-
-                for event in events {
-                    let result = Self::handle_event_inner(&event, &mut last_rename_from, &mut connection);
+                // We cache new files rather than handling them immediately so that
+                // we can process them in batches.
+                let mut new_files: Vec<PathBuf> = Vec::new();
+                for debounced_event in events {
+                    let result = self.handle_event_inner(
+                        &debounced_event,
+                        &mut last_rename_from,
+                        &mut new_files);
                     if let Err(e) = result {
                         // Log error and continue processing other events.
                         error!("Error handling event: {:?}", e);
                     }
+                }
+
+                if last_rename_from.is_some() {
+                    error!("Last RenameMode::From event without a RenameMode::To event: {:?}", last_rename_from);
+                }
+
+                let result = self.handle_new_files(&new_files);
+                if let Err(e) = result {
+                    // Log error and continue processing other events.
+                    error!("Error handling new files: {:?}", e);
                 }
             },
             Err(e) => error!("Error handling event: {:?}", e),
@@ -62,9 +60,10 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
 
 impl FsEventHandler {
     fn handle_event_inner(
+        &self,
         debounced_event: &DebouncedEvent,
         last_rename_from: &mut Option<DebouncedEvent>,
-        connection: &mut SqliteConnection
+        new_files: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
         // Handle various events.
         // If there's a class of events that we ignore, we may log the event so we can retroactively determine if it's something we should be handling.
@@ -73,6 +72,7 @@ impl FsEventHandler {
         // Further, Any/Other event fallbacks are inherently vague, and filesystem events are platform-dependent.
         // Extensive logging is therefore useful for refining our event handling for various scenarios.
 
+        
         let event = &debounced_event.event;
         match event.kind {
             EventKind::Any => info!("EventKind::Any: {:?}", event),
@@ -80,10 +80,8 @@ impl FsEventHandler {
             EventKind::Access(_) => {},
             // TODO We should indeed handle create events, duh. If it's a directory, we should add it to the watcher, and do recursion ourselves on added files/dirs.
             //      We don't want recursive watching due to how Remove() will eg only remove the top level dir. We watch one level deep, and handle the recursive bits ourselves. 
-            EventKind::Create(_) => info!("EventKind::Create: {:?}", event),
-            EventKind::Modify(modify_event_kind) => {
-                Self::handle_modify_event(debounced_event, modify_event_kind, last_rename_from, connection)?;
-            },
+            EventKind::Create(create_kind) => self.handle_create_event(debounced_event, create_kind, new_files)?,
+            EventKind::Modify(modify_event_kind) => self.handle_modify_event(debounced_event, modify_event_kind, last_rename_from)?,
             // TODO Handle the remove event. For dirs, we won't worry about recursion - any internal dir should have its own watcher.
             //      Wait, would watchers have a race condition? Hmmm. That sucks lol. It's possible that we can expect the OS to emit the events in a bottom-up fasion,
             //      since would need to delete from the bottom up (unless some filesystem is leaving dangling dirs or something??)
@@ -95,17 +93,50 @@ impl FsEventHandler {
         Ok(())
     }
 
+    fn handle_create_event(
+        &self,
+        debounced_event: &DebouncedEvent,
+        create_kind: CreateKind,
+        new_files: &mut Vec<PathBuf>,
+    ) -> anyhow::Result<()>
+    {
+        match create_kind
+        {
+            CreateKind::Any | CreateKind::Other => {
+                // TODO Determine if it's a file or folder, and handle accordingly.
+                let path = &debounced_event.paths[0];
+                if path.is_dir() {
+                    // TODO Add the folder to the watcher, and add its contents to the DB.
+                    info!("Adding folder to watcher: {:?}", path);
+                } else if path.is_file() {
+                    new_files.push(path.clone());
+                } else {
+                    // Symlinks, etc - we'll ignore them for now.
+                    info!("Ignoring non-file/non-folder create event: {:?}", path);
+                }
+            }
+            CreateKind::File => 
+            {
+                new_files.push(debounced_event.paths[0].clone());
+            },
+            CreateKind::Folder => {
+                // TODO Add the folder to the watcher, and add its contents to the DB.
+                info!("CreateKind::Folder event for: {:?}", debounced_event.paths[0]);
+            },
+        }
+
+        Ok(())
+    }
+
     fn handle_modify_event(
+        &self,
         debounced_event: &DebouncedEvent,
         modify_event_kind: ModifyKind,
         last_rename_from: &mut Option<DebouncedEvent>,
-        connection: &mut SqliteConnection,
     ) -> anyhow::Result<()>
     {
         match modify_event_kind {
-            // Intentionally ignore Modify::Any
-            // It triggers after a Create when copying files (at least on Windows), so we wouldn't want to re-do any work.
-            // Log
+            // Intentionally ignore Modify::Any. Note it triggers after a Create when copying files (at least on Windows).
             ModifyKind::Any => info!("ModifyKind::Any: {:?}", debounced_event),
             // TODO Editing a photo in some programs e.g. Clip Studio Paint will actually result in a Remove/Create pair,
             //      rather than triggering a Modify::Data event. But in case some program/process *does* directly modify the data, we can similarly just handle it
@@ -116,13 +147,13 @@ impl FsEventHandler {
             ModifyKind::Name(modify_name_kind) => {
                 match modify_name_kind {
                     // TODO Potentially differentiate between directories and files here?
-                    RenameMode::Any => {
+                    RenameMode::Any | RenameMode::Both => {
                         if debounced_event.paths.len() != 2 {
-                            return Err(anyhow::anyhow!("RenameMode::Any event expected 2 paths, got {:?}", debounced_event.paths.len()));
+                            return Err(anyhow::anyhow!("{:?} event expected 2 paths, got {:?}", modify_event_kind, debounced_event.paths.len()));
                         }
                         let from_path = &debounced_event.paths[0];
                         let to_path = &debounced_event.paths[1];
-                        Self::rename_file_in_db(from_path, to_path, connection)?;
+                        self.rename_file_in_db(from_path, to_path)?;
                     },
                     RenameMode::To => {
                         if last_rename_from.is_none() {
@@ -133,7 +164,7 @@ impl FsEventHandler {
 
                         let from_path = &rename_from_event.paths[0];
                         let to_path = &debounced_event.paths[0];
-                        Self::rename_file_in_db(from_path, to_path, connection)?;
+                        self.rename_file_in_db(from_path, to_path)?;
                     },
                     RenameMode::From => {
                         if last_rename_from.is_some() {
@@ -143,14 +174,6 @@ impl FsEventHandler {
                         *last_rename_from = Some(debounced_event.clone());
                         // We don't do any further processing here; we should process a matching RenameMode::To event next. 
                     },
-                    RenameMode::Both => {
-                        if debounced_event.paths.len() != 2 {
-                            return Err(anyhow::anyhow!("RenameMode::Both event expected 2 paths, got {:?}", debounced_event.paths.len()));
-                        }
-                        let from_path = &debounced_event.paths[0];
-                        let to_path = &debounced_event.paths[1];
-                        Self::rename_file_in_db(from_path, to_path, connection)?;
-                    }
                     RenameMode::Other => return Err(anyhow::anyhow!("Unexpected Event RenameMode::Other")),
                 }
             },
@@ -160,11 +183,51 @@ impl FsEventHandler {
         Ok(())
     }
 
+    fn handle_new_files(
+        &self,
+        new_files: &[PathBuf],
+    ) -> anyhow::Result<()>
+    {
+       
+
+        // Insert the files into the DB and get their new UUIDs.
+        let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
+        let insert_result = queries::insert_files(&new_files, &mut connection);
+        if let Err(e) = &insert_result {
+            error!("Error inserting new files into DB: {:?}", e);
+        }
+        let new_files = insert_result.unwrap();
+
+        // TODO I think we also want to do this for new files created while the program isn't running,
+        //      possibly in setup(). Handling all new_files set up (including finding them!).
+        //      When we do so, we'll want to move a lot of this into shared functions.
+
+        {
+            let clip_state = self.app_handle.state::<ClipState>();
+            let clip = &clip_state.0.lock().unwrap().clip;
+            clip.encode_image_files(&new_files, &mut connection)?;
+        }
+
+        // TODO Then add to the HNSW index...
+        // Just query the encodings table for the new UUID/encodings pairs, and add them to the hnsw index.
+
+        // TODO Then generate thumbnails (could be done async with encodings?)
+        // TODO I think we'll need to pre-validate images before sending to GPU?
+        //        Our "failed encodings" only covers files that fail to load as images,
+        //        but we just assume that any image we load is valid - but we're getting errors when we try to run inference.
+        //        We want to avoid that, especially since we'd throw away the whole batch of images.
+        //        I suppose if a batch fails, we can try to run them individually and log the failures.
+        //        TODO largely, We need to ensure we don't just *crash* on failure, though, which we currently are.
+        //             If we can just fail for individual images and log the error properly, that is a good first step.
+                
+        todo!()
+    }
+
 
     fn rename_file_in_db(
+        &self,
         from_path: &PathBuf,
         to_path: &PathBuf,
-        connection: &mut SqliteConnection,
     ) -> anyhow::Result<()>
     {
         let from_base_dir = from_path.parent().ok_or(anyhow::anyhow!("No parent for path: {:?}", from_path))?;
@@ -177,9 +240,11 @@ impl FsEventHandler {
             return Err(anyhow::anyhow!("Base dirs do not match for RenameMode::To event"));
         }
 
+        let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
+
         let base_dir_id = queries::get_base_dir_id(
             from_base_dir.to_str().ok_or(Error::PathBufToString)?,
-            connection
+            &mut connection
         )?;
 
         let base_dir_id = base_dir_id.ok_or(anyhow::anyhow!("Base dir ID not found"))?;
@@ -187,7 +252,7 @@ impl FsEventHandler {
         let file_id = queries::get_file_id_from_base_dir_and_relative_path(
             &base_dir_id, 
             from_filename.to_str().ok_or(Error::PathBufToString)?,
-            connection
+            &mut connection
         )?;
 
         let file_id = file_id.ok_or(anyhow::anyhow!("File ID not found"))?;
@@ -195,7 +260,7 @@ impl FsEventHandler {
         queries::update_filename(
             &file_id, 
             to_filename.to_str().ok_or(Error::PathBufToString)?,
-            connection
+            &mut connection
         )?;
 
         Ok(())

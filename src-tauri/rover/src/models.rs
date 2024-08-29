@@ -64,6 +64,14 @@ pub struct NewFile<'a> {
     pub relative_path: &'a str,
 }
 
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::files)]
+pub struct NewFileOwned {
+    pub id: String,
+    pub base_directory_id: String,
+    pub relative_path: String,
+}
+
 // TODO These don't match the new schema. Check this and all the other ones. They need the other new fields.
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::tag_edges)]
@@ -112,7 +120,7 @@ pub struct NewTag<'a> {
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::image_features_vit_l_14_336_px)]
 pub struct NewImageFeaturesVitL14336Px<'a> {
-    pub id: &'a str,
+    pub id: String,
     pub feature_vector: &'a [u8],
 }
 

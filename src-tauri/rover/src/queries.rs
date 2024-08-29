@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
-use crate::models::{ImageFeatureVitL14336Px, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::models::{ImageFeatureVitL14336Px, NewFile, NewFileOwned, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
 {
@@ -608,6 +608,61 @@ pub fn update_filename(file_id: &Uuid, new_filename: &str, connection: &mut Sqli
       .execute(connection)?;
 
    Ok(())
+}
+
+// Inserts the given files into the database, updating the base_directory and files tables.
+// Returns the UUIDs of the inserted files.
+pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
+{
+   use crate::schema::files;
+   use crate::schema::base_directories;
+
+   // Insert the base directories into the base_directories table.
+   // Maintain a map of base directory paths to their UUIDs.
+   let mut base_dir_id_map = std::collections::HashMap::<String, Uuid>::new();
+   for file in files {
+      // TODO - Use paths-as-strings here instead.
+      let base_dir = file.parent().unwrap();
+      let base_dir = base_dir.to_string_lossy();
+      if !base_dir_id_map.contains_key(&base_dir.to_string()) {
+         let base_dir_id = Uuid::new_v4();
+         let new_base_dir = crate::models::NewBaseDirectory {
+            id: &base_dir_id.to_string(),
+            path: &base_dir,
+         };
+         diesel::insert_into(base_directories::table)
+            .values(new_base_dir)
+            .execute(connection)?;
+         base_dir_id_map.insert(base_dir.to_string(), base_dir_id);
+      }
+   }
+
+   // Insert the relative paths into the files table.
+   // Use the base_dir_id_map to get the base directory ID for each file.
+   let mut result = Vec::new();
+   let new_file_entries: Vec<NewFileOwned> = files.iter().map(|file| {
+      // TODO use paths-as-strings here instead.
+      let base_dir = file.parent().unwrap().to_string_lossy().to_string();
+      let filename = file.file_name().unwrap().to_string_lossy().to_string();
+      let base_dir_id = base_dir_id_map.get(&base_dir).unwrap();
+      let file_id = Uuid::new_v4();
+
+      // Track the ID with the file path for output.
+      result.push((file_id, file.clone()));
+
+      let new_file_entry = NewFileOwned {
+         id: file_id.to_string(),
+         base_directory_id: base_dir_id.to_string(),
+         relative_path: filename,
+      };
+      new_file_entry
+   }).collect();
+
+   diesel::insert_into(files::table)
+      .values(&new_file_entries)
+      .execute(connection)?;
+
+   Ok(result)
 }
 
 #[cfg(test)]
