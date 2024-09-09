@@ -146,16 +146,8 @@ pub fn populate_hnsw(app: &mut App) -> anyhow::Result<()>
     let results = SelectDsl::select(image_features_vit_l_14_336_px::table, ImageFeatureVitL14336Px::as_select())
         .load::<ImageFeatureVitL14336Px>(connection).context("Unable to load image features")?;
 
-    // TODO Work anyhow into this closure, it's a bit annoying. fetch_thumbnails() does basically what we'd need to do;
-    //      the iterator implements Into for anyhow::Result, so you just need to specify that type for hnsw_elements.
-    //      Closures are the only slightly tricky bit left, so just do it and we can propagate up through commands etc and close the ticket.
     // Create the HnswElements
-    let hnsw_elements = results.iter().map(
-        |x| Ok(HnswElement 
-        {
-            feature_vector: bincode::deserialize(&x.feature_vector[..])?,
-            id: Uuid::parse_str(&x.id)?,
-        })).collect::<anyhow::Result<Vec<HnswElement>>>()?;
+    let hnsw_elements = convert_rows_to_hnsw_elements(&results)?;
 
     // Get the HnswSearch from the app's SearchState
     let state = app.state::<SearchState>();
@@ -165,4 +157,14 @@ pub fn populate_hnsw(app: &mut App) -> anyhow::Result<()>
     state.hnsw.insert_slice(hnsw_elements);
 
     Ok(())
+}
+
+pub fn convert_rows_to_hnsw_elements(rows: &[ImageFeatureVitL14336Px]) -> anyhow::Result<Vec<HnswElement>>
+{
+    Ok(rows.iter().map(
+        |x| Ok(HnswElement 
+        {
+            feature_vector: bincode::deserialize(&x.feature_vector[..])?,
+            id: Uuid::parse_str(&x.id)?,
+        })).collect::<anyhow::Result<Vec<HnswElement>>>()?)
 }

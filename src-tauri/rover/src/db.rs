@@ -49,16 +49,19 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
     }
 }
 
-pub fn get_connection_pool() -> anyhow::Result<Pool<ConnectionManager<SqliteConnection>>> {
-    let db_path = get_db_path()?;
+pub fn get_connection_pool(app_handle: &tauri::AppHandle) -> anyhow::Result<Pool<ConnectionManager<SqliteConnection>>> {
+    let db_path = get_db_path(app_handle)?;
+
+    let db_path_str = db_path.to_str().ok_or(anyhow::anyhow!("Error converting path to string"))?;
 
     // Ensure the db file exists at the path.
     // This doesn't run the migrations, we just ensure the file exists.
     if !Path::new(&db_path).exists() {
-        SqliteConnection::establish(&db_path)?;
+        SqliteConnection::establish(db_path_str)?;
     }
 
-    let manager = ConnectionManager::<SqliteConnection>::new(db_path);
+    let manager =
+        ConnectionManager::<SqliteConnection>::new(db_path_str);
 
     let result = Pool::builder()
         .test_on_check_out(true)
@@ -105,14 +108,10 @@ fn run_migrations(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow:
 /// Ensures that its parent directory exists.
 /// The DB file may not exist yet; this function just gets the path.
 /// Call diesel's `*Connection::establish()` to ensure the file exists.
-fn get_db_path() -> anyhow::Result<String> {
-    // TODO Pick a better spot for this, possibly in the app data directory?
-    let home_dir = dirs::home_dir().ok_or(anyhow::anyhow!("Unable to get home directory"))?;
-    let path = home_dir.to_str()
-        .ok_or(anyhow::anyhow!("Unable to convert home directory PathBuf to string"))?
-        .to_string() + "/.config/refrover/sqlite.refrover.db";
-    // Ensure the directory exists.
-    fs::create_dir_all(Path::new(&path).parent().ok_or(anyhow::anyhow!("Error getting parent directory"))?)?;
+fn get_db_path(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let dir = app_handle.path_resolver().app_data_dir().ok_or(anyhow::anyhow!("Error getting app data path"))?;
+    let path = dir.join("sqlite.refrover.db");
+    fs::create_dir_all(&path.parent().ok_or(anyhow::anyhow!("Error getting parent directory"))?)?;
     Ok(path)
 }
 

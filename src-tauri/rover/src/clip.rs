@@ -170,6 +170,13 @@ impl Clip
     /// Encodes the images with the given Uuids and paths and saves the feature vectors to the database.
     pub fn encode_image_files(&self, files: &[(Uuid, PathBuf)], connection: &mut SqliteConnection) -> anyhow::Result<()>
     {
+        // TODO I think we'll need to pre-validate images before sending to GPU?
+        //        Our "failed encodings" only covers files that fail to load as images,
+        //        but we just assume that any image we load is valid - but we're getting errors when we try to run inference.
+        //        We want to avoid that, especially since we'd throw away the whole batch of images.
+        //        I suppose if a batch fails, we can try to run them individually and log the failures.
+        //   TODO largely, We need to ensure we don't just *crash* on failure, though, which we currently are.
+        //        If we can just fail for individual images and log the error properly, that is a good first step.
         use crate::schema::image_features_vit_l_14_336_px;
         use crate::schema::failed_encodings;
         

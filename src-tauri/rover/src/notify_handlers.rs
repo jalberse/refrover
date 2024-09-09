@@ -1,15 +1,12 @@
 
 use std::path::PathBuf;
 
-use diesel::RunQueryDsl;
-use image::DynamicImage;
 use log::{error, info};
-use ndarray::Array2;
 use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
 use uuid::Uuid;
 
-use crate::{error::Error, models::{NewFailedEncoding, NewImageFeaturesVitL14336Px}, preprocessing, queries, state::{ClipState, ConnectionPoolState}};
+use crate::{ann, error::Error, models::{NewFailedEncoding, NewImageFeaturesVitL14336Px}, preprocessing, queries, state::{ClipState, ConnectionPoolState, SearchState}};
 
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
 pub struct FsEventHandler
@@ -188,8 +185,6 @@ impl FsEventHandler {
         new_files: &[PathBuf],
     ) -> anyhow::Result<()>
     {
-       
-
         // Insert the files into the DB and get their new UUIDs.
         let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
         let insert_result = queries::insert_files(&new_files, &mut connection);
@@ -208,19 +203,28 @@ impl FsEventHandler {
             clip.encode_image_files(&new_files, &mut connection)?;
         }
 
-        // TODO Then add to the HNSW index...
-        // Just query the encodings table for the new UUID/encodings pairs, and add them to the hnsw index.
+        {
+            let file_ids = new_files.iter().map(|file| {
+                file.0.clone()
+            }).collect::<Vec<Uuid>>();
+            
+            let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
+            
+            let image_features = queries::get_image_feature_data(&file_ids, &mut connection)?;
+            
+            let hnsw_elements = ann::convert_rows_to_hnsw_elements(&image_features)?;
+            
+            let search_state = self.app_handle.state::<SearchState>();
+            let mut search_inner = search_state.0.lock().unwrap();
+            let hnsw = &mut search_inner.hnsw;
+            hnsw.insert_slice(hnsw_elements);
+        }
 
-        // TODO Then generate thumbnails (could be done async with encodings?)
-        // TODO I think we'll need to pre-validate images before sending to GPU?
-        //        Our "failed encodings" only covers files that fail to load as images,
-        //        but we just assume that any image we load is valid - but we're getting errors when we try to run inference.
-        //        We want to avoid that, especially since we'd throw away the whole batch of images.
-        //        I suppose if a batch fails, we can try to run them individually and log the failures.
-        //        TODO largely, We need to ensure we don't just *crash* on failure, though, which we currently are.
-        //             If we can just fail for individual images and log the error properly, that is a good first step.
-                
-        todo!()
+        // TODO Lower priority: Possibly generate thumbnails here.
+        //      Low priority since generating them as-needed is fine for now.
+        //      Could be done async with encodings.
+
+        Ok(())
     }
 
 

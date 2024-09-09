@@ -25,6 +25,9 @@
       "protocol": {
         "asset": true,
         "assetScope": ["**", "$APPDATA/*"]
+      },
+      "path": {
+        "all": true
       }
     },
     "bundle": {

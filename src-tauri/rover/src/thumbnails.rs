@@ -9,6 +9,9 @@ use crate::{db, models::NewThumbnail, queries, state::ConnectionPoolState};
 
 const MAX_THUMBNAIL_DIMENSION: u32 = 600;
 
+// TODO Consider storing thumbnails in a thumbnails/ dir within AppData.
+//   Keeps things a bit more organized on disk.
+
 pub fn thumbnail(
     orig_image: &DynamicImage,
 ) -> ImageBuffer<image::Rgba<u8>, Vec<u8>>

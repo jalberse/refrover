@@ -8,6 +8,7 @@ use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
+use log::info;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
@@ -504,6 +505,18 @@ pub fn get_all_image_feature_data(connection: &mut SqliteConnection) -> anyhow::
    Ok(image_feature_data)
 }
 
+pub fn get_image_feature_data(ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<ImageFeatureVitL14336Px>>
+{
+   use crate::schema::image_features_vit_l_14_336_px::dsl::*;
+
+   let image_feature_data = image_features_vit_l_14_336_px
+      .select(ImageFeatureVitL14336Px::as_select())
+      .filter(id.eq_any(ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
+      .load(connection)?;
+
+   Ok(image_feature_data)
+}
+
 pub fn insert_thumbnail(thumbnail: &NewThumbnail, connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::thumbnails;
@@ -617,23 +630,43 @@ pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> any
    use crate::schema::files;
    use crate::schema::base_directories;
 
-   // Insert the base directories into the base_directories table.
-   // Maintain a map of base directory paths to their UUIDs.
+   // Fun with maps! You can get the unique values from a collection by collecting them into a HashSet.
+   let binding = files.iter()
+      .map(|file| file.parent().unwrap().to_string_lossy().to_string())
+      .collect::<std::collections::HashSet<String>>();
+   let unique_base_dirs: Vec<String> = binding
+      .into_iter()
+      .collect();
+
    let mut base_dir_id_map = std::collections::HashMap::<String, Uuid>::new();
-   for file in files {
-      // TODO - Use paths-as-strings here instead.
-      let base_dir = file.parent().unwrap();
-      let base_dir = base_dir.to_string_lossy();
-      if !base_dir_id_map.contains_key(&base_dir.to_string()) {
-         let base_dir_id = Uuid::new_v4();
-         let new_base_dir = crate::models::NewBaseDirectory {
-            id: &base_dir_id.to_string(),
-            path: &base_dir,
-         };
-         diesel::insert_into(base_directories::table)
-            .values(new_base_dir)
-            .execute(connection)?;
-         base_dir_id_map.insert(base_dir.to_string(), base_dir_id);
+   for base_dir in &unique_base_dirs {
+      // First, check if the base directory already exists in the database.
+      let result = base_directories::table
+         .select(base_directories::id)
+         .filter(base_directories::path.eq(base_dir))
+         .first::<String>(connection)
+         .optional()?;
+      
+      match result {
+         // If the base directory exists, store the ID in the map.
+         Some(base_dir_id) => {
+            base_dir_id_map.insert(base_dir.clone(), Uuid::parse_str(&base_dir_id)?);
+         },
+         // If it does not, we'll insert a new entry for it.
+         None => {
+            let base_dir_id = Uuid::new_v4();
+            // TODO - Use paths-as-strings here instead.
+            let new_base_dir = crate::models::NewBaseDirectory {
+               id: &base_dir_id.to_string(),
+               path: &base_dir,
+            };
+            
+            diesel::insert_into(base_directories::table)
+               .values(new_base_dir)
+               .execute(connection)?;
+      
+            base_dir_id_map.insert(base_dir.clone(), base_dir_id);
+         }
       }
    }
 
@@ -644,6 +677,7 @@ pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> any
       // TODO use paths-as-strings here instead.
       let base_dir = file.parent().unwrap().to_string_lossy().to_string();
       let filename = file.file_name().unwrap().to_string_lossy().to_string();
+
       let base_dir_id = base_dir_id_map.get(&base_dir).unwrap();
       let file_id = Uuid::new_v4();
 
@@ -655,6 +689,7 @@ pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> any
          base_directory_id: base_dir_id.to_string(),
          relative_path: filename,
       };
+
       new_file_entry
    }).collect();
 

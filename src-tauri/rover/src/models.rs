@@ -64,7 +64,7 @@ pub struct NewFile<'a> {
     pub relative_path: &'a str,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, Debug)]
 #[diesel(table_name = crate::schema::files)]
 pub struct NewFileOwned {
     pub id: String,

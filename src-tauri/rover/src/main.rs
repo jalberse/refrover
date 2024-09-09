@@ -48,11 +48,6 @@ fn main() -> anyhow::Result<()> {
             .level(LOG_LEVEL)
             .build())
         .manage(
-            ConnectionPoolState(
-                    Mutex::new(InnerConnectionPoolState { pool: db::get_connection_pool()? })
-                )
-        )
-        .manage(
             ClipState(
                     Mutex::new(InnerClipState { clip: Clip::new()? })
                 )
@@ -69,6 +64,12 @@ fn main() -> anyhow::Result<()> {
             )
         .setup(|app| {
 
+            app.manage(
+                ConnectionPoolState(
+                    Mutex::new(InnerConnectionPoolState { pool: db::get_connection_pool(&app.app_handle())? })
+                )
+            );
+
             // Use e.g. `pnpm tauri dev --release -- -- -p` to pass arguments.
             // Multiple `--` are needed to pass arguments to the binary.
             let populate_dummy_data = match app.get_cli_matches() {
@@ -82,6 +83,7 @@ fn main() -> anyhow::Result<()> {
                 },
             };
 
+            
             let pool_state = app.state::<ConnectionPoolState>();
 
             
@@ -96,7 +98,6 @@ fn main() -> anyhow::Result<()> {
 
             // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
             tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
-
             
 
             // We rebuild every time the app launches; it is fast enough, and it handles the fact that
