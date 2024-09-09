@@ -8,12 +8,11 @@ use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
-use log::info;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
-use crate::models::{ImageFeatureVitL14336Px, NewFile, NewFileOwned, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::models::{ImageFeatureVitL14336Px, NewFileOwned, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
 {
@@ -26,7 +25,8 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
 
    // TODO Change our UUIDs to use some wrapper class
    //      https://github.com/diesel-rs/diesel/issues/364
-   //      Would be binary (or I could go text) in the DB
+   //      Would be binary (or I could go text) in the DB.
+   //      I actually like text, for debugging purposes.
 
    // TODO This does seem to be working. Render it, and let the user filter files by tags by selecting in the tree.
    //      https://github.com/jpb12/react-tree-graph/tree/master/.storybook/stories

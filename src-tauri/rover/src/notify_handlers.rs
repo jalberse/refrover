@@ -6,7 +6,7 @@ use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RenameMode}
 use tauri::Manager;
 use uuid::Uuid;
 
-use crate::{ann, error::Error, models::{NewFailedEncoding, NewImageFeaturesVitL14336Px}, preprocessing, queries, state::{ClipState, ConnectionPoolState, SearchState}};
+use crate::{ann, error::Error, queries, state::{ClipState, ConnectionPoolState, SearchState}};
 
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
 pub struct FsEventHandler

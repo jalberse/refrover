@@ -3,9 +3,6 @@
     windows_subsystem = "windows"
 )]
 
-use std::process::exit;
-use std::process::ExitCode;
-use std::sync::Arc;
 use std::sync::Mutex;
 
 use app::ann;

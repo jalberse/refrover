@@ -144,15 +144,6 @@ pub struct NewFailedEncoding {
 }
 
 #[derive(Queryable, Selectable)]
-#[diesel(table_name = crate::schema::failed_encodings)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-pub struct FailedEncoding {
-    pub id: String,
-    pub error: String,
-    pub failed_at: time::PrimitiveDateTime,
-}
-
-#[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::thumbnails)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
