@@ -700,6 +700,66 @@ pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> any
    Ok(result)
 }
 
+pub fn remove_base_directory(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::base_directories;
+
+   diesel::delete(base_directories::table.filter(base_directories::path.eq(base_dir)))
+      .execute(connection)?;
+
+   Ok(())
+}
+
+pub fn remove_file(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::files;
+
+   diesel::delete(files::table.filter(files::id.eq(file_id.to_string())))
+      .execute(connection)?;
+
+   Ok(())
+}
+
+pub fn remove_encodings(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::image_features_vit_l_14_336_px;
+
+   diesel::delete(image_features_vit_l_14_336_px::table.filter(image_features_vit_l_14_336_px::id.eq(file_id.to_string())))
+      .execute(connection)?;
+
+   Ok(())
+}
+
+pub fn remove_failed_encoding(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::failed_encodings;
+
+   diesel::delete(failed_encodings::table.filter(failed_encodings::id.eq(file_id.to_string())))
+      .execute(connection)?;
+
+   Ok(())
+}
+
+pub fn remove_file_tags(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::file_tags;
+
+   diesel::delete(file_tags::table.filter(file_tags::file_id.eq(file_id.to_string())))
+      .execute(connection)?;
+
+   Ok(())
+}
+
+pub fn remove_thumbnail(thumbnail_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::thumbnails;
+
+   diesel::delete(thumbnails::table.filter(thumbnails::id.eq(thumbnail_id.to_string())))
+      .execute(connection)?;
+
+   Ok(())
+}
+
 #[cfg(test)]
 mod tests
 {

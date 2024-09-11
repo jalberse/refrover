@@ -1,8 +1,8 @@
 
 use std::path::PathBuf;
 
-use log::{error, info};
-use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
+use log::{error, info, warn};
+use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
 use uuid::Uuid;
 
@@ -16,6 +16,9 @@ pub struct FsEventHandler
 
 impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
     fn handle_event(&mut self, result: DebounceEventResult) {
+
+        // TODO We'll want to notify the frontend of the event so we can update the status bar UI at the bottom.
+
         match result {
             Ok(events) => {
                 // Events are be stored in the following order:
@@ -52,6 +55,8 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
             },
             Err(e) => error!("Error handling event: {:?}", e),
         }
+
+        // TODO Notify frontend again to let it know that we're done processing the event(s).
     }
 }
 
@@ -69,7 +74,13 @@ impl FsEventHandler {
         // Further, Any/Other event fallbacks are inherently vague, and filesystem events are platform-dependent.
         // Extensive logging is therefore useful for refining our event handling for various scenarios.
 
-        
+        // TODO Consider ignoring directory changes for now.
+        //      The user *can* add them as watched directories through the UI.
+        //      We can come back and add this later (and I do think we should, it's intuitive that we'd want to watch recursively).
+        //      But for now, this is less important than *shipping something complete*.
+        //      That does mean we want to detect directory changes though, and just log/ignore them.
+        //      We don't want to treat a dir path as a file path.
+
         let event = &debounced_event.event;
         match event.kind {
             EventKind::Any => info!("EventKind::Any: {:?}", event),
@@ -82,8 +93,11 @@ impl FsEventHandler {
             // TODO Handle the remove event. For dirs, we won't worry about recursion - any internal dir should have its own watcher.
             //      Wait, would watchers have a race condition? Hmmm. That sucks lol. It's possible that we can expect the OS to emit the events in a bottom-up fasion,
             //      since would need to delete from the bottom up (unless some filesystem is leaving dangling dirs or something??)
-            EventKind::Remove(_) => info!("EventKind::Remove: {:?}", event),
-            // TODO Just like Any, just warn!() for now...
+            EventKind::Remove(remove_kind) => {
+                info!("EventKind::Remove: {:?}", event);
+                info!("RemoveKind: {:?}", remove_kind);
+                self.handle_remove_event(debounced_event, remove_kind)?;
+            },
             EventKind::Other => info!("EventKind::Other: {:?}", event),
         }
 
@@ -100,16 +114,16 @@ impl FsEventHandler {
         match create_kind
         {
             CreateKind::Any | CreateKind::Other => {
-                // TODO Determine if it's a file or folder, and handle accordingly.
                 let path = &debounced_event.paths[0];
                 if path.is_dir() {
-                    // TODO Add the folder to the watcher, and add its contents to the DB.
-                    info!("Adding folder to watcher: {:?}", path);
+                    // TODO Ignoring directories for now; they can be added through the UI.
+                    //      Eventually, add the folder to the watcher, and add its contents to the DB, recursively.
+                    info!("Create event for directory: {:?}", path);
                 } else if path.is_file() {
                     new_files.push(path.clone());
                 } else {
                     // Symlinks, etc - we'll ignore them for now.
-                    info!("Ignoring non-file/non-folder create event: {:?}", path);
+                    warn!("Ignoring non-file/non-folder create event: {:?}", path);
                 }
             }
             CreateKind::File => 
@@ -133,23 +147,40 @@ impl FsEventHandler {
     ) -> anyhow::Result<()>
     {
         match modify_event_kind {
-            // Intentionally ignore Modify::Any. Note it triggers after a Create when copying files (at least on Windows).
-            ModifyKind::Any => info!("ModifyKind::Any: {:?}", debounced_event),
-            // TODO Editing a photo in some programs e.g. Clip Studio Paint will actually result in a Remove/Create pair,
-            //      rather than triggering a Modify::Data event. But in case some program/process *does* directly modify the data, we can similarly just handle it
-            //      by treating it as we would a Remove/Create pair.
-            ModifyKind::Data(_) => todo!(),
-            // We are ignoring Metadata events for now; log them for now so we can retroactively determine if there's something we should handle.
-            ModifyKind::Metadata(event) => info!("ModifyKind::Metadata: {:?}", event),
+            ModifyKind::Any => {
+                // Intentionally ignore Modify::Any. 
+                // It triggers after a Create when copying files (at least on Windows).
+                // If there is a scenario where we should handle it, we can determine that from logs.
+                info!("ModifyKind::Any: {:?}", debounced_event);
+            },
+            ModifyKind::Data(_) =>{
+                // TODO Editing a photo in some programs e.g. Clip Studio Paint will actually result in a Remove/Create pair,
+                //      rather than triggering a Modify::Data event. But in case some program/process *does* directly modify the data, we can similarly just handle it
+                //      by treating it as we would a Remove/Create pair.
+                todo!()
+            },
+            ModifyKind::Metadata(event) => {
+                // We are ignoring Metadata events for now;
+                // log them for now so we can retroactively determine if there's something we should handle.
+                info!("ModifyKind::Metadata: {:?}", event);
+            },
             ModifyKind::Name(modify_name_kind) => {
                 match modify_name_kind {
-                    // TODO Potentially differentiate between directories and files here?
-                    RenameMode::Any | RenameMode::Both => {
+                    RenameMode::Any | RenameMode::Both | RenameMode::Other => {
                         if debounced_event.paths.len() != 2 {
                             return Err(anyhow::anyhow!("{:?} event expected 2 paths, got {:?}", modify_event_kind, debounced_event.paths.len()));
                         }
                         let from_path = &debounced_event.paths[0];
                         let to_path = &debounced_event.paths[1];
+
+                        if from_path.is_dir() && to_path.is_dir()
+                        {
+                            info!("Intentionally ignoring RenameMode::Both event for directories: {:?} -> {:?}", from_path, to_path);
+                            return Ok(());
+                        } else if from_path.is_dir() || to_path.is_dir() {
+                            return Err(anyhow::anyhow!("File/directory mismatch in RenameMode::Both event"));
+                        }
+
                         self.rename_file_in_db(from_path, to_path)?;
                     },
                     RenameMode::To => {
@@ -161,6 +192,15 @@ impl FsEventHandler {
 
                         let from_path = &rename_from_event.paths[0];
                         let to_path = &debounced_event.paths[0];
+
+                        if from_path.is_dir() && to_path.is_dir()
+                        {
+                            info!("Intentionally ignoring RenameMode::Both event for directories: {:?} -> {:?}", from_path, to_path);
+                            return Ok(());
+                        } else if from_path.is_dir() || to_path.is_dir() {
+                            return Err(anyhow::anyhow!("File/directory mismatch in RenameMode::Both event"));
+                        }
+
                         self.rename_file_in_db(from_path, to_path)?;
                     },
                     RenameMode::From => {
@@ -171,7 +211,6 @@ impl FsEventHandler {
                         *last_rename_from = Some(debounced_event.clone());
                         // We don't do any further processing here; we should process a matching RenameMode::To event next. 
                     },
-                    RenameMode::Other => return Err(anyhow::anyhow!("Unexpected Event RenameMode::Other")),
                 }
             },
             ModifyKind::Other => todo!(),
@@ -267,6 +306,112 @@ impl FsEventHandler {
             &mut connection
         )?;
 
+        Ok(())
+    }
+
+
+    fn handle_remove_event(
+        &self,
+        debounced_event: &DebouncedEvent,
+        remove_kind: RemoveKind,
+    ) -> anyhow::Result<()>
+    {
+        match remove_kind
+        {
+            RemoveKind::Any | RemoveKind::Other => {
+                // TODO Detect file or folder and pass accordingly. Ignore symlinks etc for now.
+                //  That's just path.is_dir() and path.is_file() (else symlink etc).
+                let path = &debounced_event.paths[0];
+                if path.is_dir() {
+                    self.handle_remove_directory(path)?;
+                } else if path.is_file() {
+                    self.handle_remove_file(path)?;
+                } else {
+                    // Symlinks, etc - we'll ignore them for now.
+                    warn!("Ignoring non-file/non-folder remove event: {:?}", path);
+                }
+            },
+            RemoveKind::File => self.handle_remove_file(&debounced_event.paths[0])?,
+            RemoveKind::Folder => self.handle_remove_directory(&debounced_event.paths[0])?,
+        }
+
+        Ok(())
+    }
+
+    fn handle_remove_file(
+        &self,
+        path: &PathBuf,
+    ) -> anyhow::Result<()>
+    {
+
+        // TODO Actually, this isn't what we want. !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        //  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        //  CSP e.g. will do remove/create for a file edit.
+        //  But we don't want to lose the tags for that file, only the encodings + thumbnail (to be regenerated).
+        //  So we should probably just remove the encodings and the failed encodings.
+        //  So this removes "stuff we can regenerate that may be invalidated" but not "stuff the user associates with that path"
+
+        let base_dir = path.parent().ok_or(anyhow::anyhow!("No parent for path: {:?}", path))?;
+        let filename = path.file_name().ok_or(anyhow::anyhow!("No filename for path: {:?}", path))?;
+        
+        let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
+        let base_dir_id = queries::get_base_dir_id(
+            base_dir.to_str().ok_or(Error::PathBufToString)?,
+            &mut connection
+        )?;
+
+        let base_dir_id = base_dir_id.ok_or(anyhow::anyhow!("Base dir ID not found"))?;
+
+        let file_id = queries::get_file_id_from_base_dir_and_relative_path(
+            &base_dir_id, 
+            filename.to_str().ok_or(Error::PathBufToString)?,
+            &mut connection
+        )?;
+
+        let file_id = file_id.ok_or(anyhow::anyhow!("File ID not found"))?;
+
+        queries::remove_file_tags(&file_id, &mut connection)?;
+        queries::remove_failed_encoding(&file_id, &mut connection)?;
+        queries::remove_encodings(&file_id, &mut connection)?;
+
+        let thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection)?;
+
+        if let Some(thumbnail) = thumbnail {
+            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbnail.id)?, &mut connection)?;
+
+            // Delete the thumbnail from the filesystem.
+            let app_data_path = self.app_handle.path_resolver().app_data_dir().ok_or(anyhow::anyhow!("Error getting app data path"))?;
+            let full_path = app_data_path.join(&thumbnail.path);
+            std::fs::remove_file(full_path)?;
+        }
+
+        Ok(())
+    }
+
+    fn handle_remove_directory(
+        &self,
+        path: &PathBuf,
+    ) -> anyhow::Result<()>
+    {
+        // TODO We'll need to remove all the files in the contained folder from the DB.
+        //      We can probabyl use handle_remove_file() for that for all the IDs contained.
+        //      (or a shared fn since that needs to get IDs from the path, we get the IDs from the relational table).
+        //      Then we need to remove the folder itself from the DB's base dir table.
+        // TODO And then we need to remove the watcher for that folder.
+        //      That won't be *this* watcher, but the one that's watching that folder.
+        //      I'm vaguely worried about conflicts there?
+        // TODO What about recursive? I'm kind of ~assuming~ that the OS will emit events in a bottom-up fashion.
+        //      After all, it needs to delete the contents before the folder itself, itself.
+        //      But if not, that's tricky.
+        
+        // TODO If the user adds a watched directory, and then it gets removed from the fs, what happens?
+        //      Well, we could have a watcher that monitors each watched dir's parents, and checks for its removal.
+        //      But if the dir is removed while the program is not running, we'd need to check for that anyways.
+        //      Maybe that could be done on startup and then we have the parents watching for removal?
+        //      Or we could just detect that it's missing when we try to access it and remove it then if we see it's missing?
+
+        // TODO ... But for now, we're ignoring this. 
+        info!("Remove event for directory: {:?}", path);
         Ok(())
     }
 
