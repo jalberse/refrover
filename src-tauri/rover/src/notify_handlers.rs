@@ -232,10 +232,6 @@ impl FsEventHandler {
         }
         let new_files = insert_result.unwrap();
 
-        // TODO I think we also want to do this for new files created while the program isn't running,
-        //      possibly in setup(). Handling all new_files set up (including finding them!).
-        //      When we do so, we'll want to move a lot of this into shared functions.
-
         {
             let clip_state = self.app_handle.state::<ClipState>();
             let clip = &clip_state.0.lock().unwrap().clip;
@@ -265,7 +261,6 @@ impl FsEventHandler {
 
         Ok(())
     }
-
 
     fn rename_file_in_db(
         &self,
@@ -319,8 +314,6 @@ impl FsEventHandler {
         match remove_kind
         {
             RemoveKind::Any | RemoveKind::Other => {
-                // TODO Detect file or folder and pass accordingly. Ignore symlinks etc for now.
-                //  That's just path.is_dir() and path.is_file() (else symlink etc).
                 let path = &debounced_event.paths[0];
                 if path.is_dir() {
                     self.handle_remove_directory(path)?;
@@ -343,13 +336,14 @@ impl FsEventHandler {
         path: &PathBuf,
     ) -> anyhow::Result<()>
     {
-
-        // TODO Actually, this isn't what we want. !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        //  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        //  CSP e.g. will do remove/create for a file edit.
-        //  But we don't want to lose the tags for that file, only the encodings + thumbnail (to be regenerated).
-        //  So we should probably just remove the encodings and the failed encodings.
-        //  So this removes "stuff we can regenerate that may be invalidated" but not "stuff the user associates with that path"
+        // TODO Note that sometimes, a Remove/Create pair will be used instead of a Modify event,
+        // such as when editing a photo in Clip Studio Paint. In this case, we might not want
+        // to remove the tags and other user-specified content, only things that are invalidated
+        // (i.e. encodings and thumbnails). For now, I am going to simply remove everything,
+        // and assume such cases don't normally come up (I could see people not wanting to lose
+        // tags just because they e.g. did some redlining on reference photos, though).
+        // I could imagine needing to change this in the future, but I think it's enough of an edge
+        // case (I expect most users will mostly dump + forget files) that it's fine for now.
 
         let base_dir = path.parent().ok_or(anyhow::anyhow!("No parent for path: {:?}", path))?;
         let filename = path.file_name().ok_or(anyhow::anyhow!("No filename for path: {:?}", path))?;
@@ -370,9 +364,9 @@ impl FsEventHandler {
 
         let file_id = file_id.ok_or(anyhow::anyhow!("File ID not found"))?;
 
-        queries::remove_file_tags(&file_id, &mut connection)?;
-        queries::remove_failed_encoding(&file_id, &mut connection)?;
-        queries::remove_encodings(&file_id, &mut connection)?;
+        queries::delete_file_tags(&file_id, &mut connection)?;
+        queries::delete_failed_encoding(&file_id, &mut connection)?;
+        queries::delete_encodings(&file_id, &mut connection)?;
 
         let thumbnail = queries::get_thumbnail_by_file_id(file_id, &mut connection)?;
 
@@ -414,22 +408,4 @@ impl FsEventHandler {
         info!("Remove event for directory: {:?}", path);
         Ok(())
     }
-
-    //      Then once we're actually watching some dirs, we can create/remove files and folders
-    //      and check that we get those events as we'd expect.
-
-    // TODO Functions for each of create/remove file/folder (and call from above)
-    // Folders:
-    // Add/remove contained files to/from DB, and add/remove folder to/from DB.
-    // (ordering depending on if we are creating or removing, for FK constraints)
-    // Also add/remove to the watcher itself (so probably pass app state in)
-    //   We might need to store a reference to that in the NewImageFileHandler struct itself?
-    // Basically anything with fileids we'd need to add/remove from the DB.
-    // Including encodings.
-    // Also set up fs allowances, eg: tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
-    // Files:
-    // Add/remove file to/from DB, and add/remove encodings to/from DB.
-    //  Again we'd need appstate for the DB connection and CLIP.
-    // 
-    // The FsEventHandler has an app_handle that we can use to get the app state, db connection, etc.
 }

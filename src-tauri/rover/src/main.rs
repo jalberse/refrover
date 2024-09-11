@@ -93,24 +93,22 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
-            tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
             
 
-            // We rebuild every time the app launches; it is fast enough, and it handles the fact that
-            // we can't remove elements from the HNSW index.
-            info!("Populating HNSW index...");
-            let now = std::time::Instant::now();
-            ann::populate_hnsw(app)?;
-            let elapsed = now.elapsed();
-            info!("HNSW rebuild took {:?}", elapsed);
-            info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
-            info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
+            
 
             // TODO We need a table that stores the watched directories.
             //      We need to populate the front-end with them,
             //      and create watchers for them.
             //      Right now it's hardcoded to D:\refrover_photos that gets added on click.
+
+            // TODO For files that were added while the program *wasn't* running, we need to
+            // scan them and add them to the HNSW index (and any other relevant tables).
+            // Thumbnails we can ignore for now, generating them on the fly is OK.
+            // We'll probably share a lot of code with that in the FS watcher.
+
+            // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
+            tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
 
             let fs_event_handler = notify_handlers::FsEventHandler {
                 app_handle: app.handle().clone(),
@@ -126,6 +124,25 @@ fn main() -> anyhow::Result<()> {
                     return Err(anyhow::Error::new(e).into());
                 }
             }
+
+            // We rebuild every time the app launches;
+            // it is fast enough, and it handles the fact that
+            // we can't remove elements from the HNSW index.
+            // TODO Consider a more sophisticated approach if this becomes a bottleneck?
+            // We could be dumping the index and loading it, but then we don't notice deleted files.
+            // We could periodically rebuild the index and overwrite the old index (keeping backups, likely).
+            // That could be on some count of removed files which can trigger the rebuild.
+            // We only need to rebuild due to the removal of files, since we can add elements whenever we want.
+            // Say every (configurable) 100 files removed, we rebuild (check after batches of removed files, though).
+            // TODO Speaking of, maybe we should have a table that stores removed files and their UUIDs,
+            //      in case we ever need to recover information.
+            info!("Populating HNSW index...");
+            let now = std::time::Instant::now();
+            ann::populate_hnsw(app)?;
+            let elapsed = now.elapsed();
+            info!("HNSW rebuild took {:?}", elapsed);
+            info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
+            info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
 
             Ok(())
         })
