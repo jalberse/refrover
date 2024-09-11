@@ -8,7 +8,7 @@ use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcher
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
 use imghdr;
-use crate::interface::{FileMetadata, FileUuid, ImageSize, Thumbnail, ThumbnailUuid};
+use crate::interface::{FileMetadata, FileUuid, ImageSize, Payload, Thumbnail, ThumbnailUuid};
 use anyhow_tauri::{IntoTAResult, TAResult};
 
 use rayon::prelude::*; // For par_iter
@@ -183,6 +183,8 @@ pub async fn add_watched_directory(
 {
     // TODO Ensure that if the directory is already added, we don't add it again.
     //      Consider recursive as well?
+
+    app_handle.emit_all("fs-event", Payload { message: format!("Adding directory {:?}", directory_path) }).into_ta_result()?;
 
     let directory_path = std::path::Path::new(&directory_path);
 

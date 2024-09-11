@@ -25,6 +25,7 @@ use log::info;
 use log::LevelFilter;
 use tauri::Manager;
 use tauri_plugin_log::LogTarget;
+use app::interface::Payload;
 
 #[cfg(debug_assertions)]
 // Note that Trace level causes massive slowdowns due to I/O in HNSW.

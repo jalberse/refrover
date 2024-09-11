@@ -1,5 +1,5 @@
 // Should be kept in synch with the Rust FileMetadata struct.
-interface FileMetadata {
+type FileMetadata = {
   file_id: string
   filename: string
   thumbnail_filepath: string

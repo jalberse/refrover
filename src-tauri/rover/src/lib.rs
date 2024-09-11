@@ -10,5 +10,5 @@ pub mod state;
 mod error;
 mod thumbnails;
 mod junk_drawer;
-mod interface;
+pub mod interface;
 pub mod notify_handlers;

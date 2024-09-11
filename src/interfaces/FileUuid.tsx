@@ -1,4 +1,4 @@
-interface FileUuid {
+type FileUuid = {
   uuid: string
 }
 

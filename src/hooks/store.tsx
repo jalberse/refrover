@@ -1,9 +1,13 @@
 import { create } from "zustand"
 
-interface RoverStore {
+type RoverStore = {
   detailsViewFileUuid: string
   setDetailsViewFileUuid: (uuid: string) => void
   clearDetailsViewFileUuid: () => void
+
+  fsEventStatus: string
+  setFsEventStatus: (status: string) => void
+  clearFsEventStatus: () => void
 }
 
 const useRoverStore = create<RoverStore>((set) => ({
@@ -13,6 +17,13 @@ const useRoverStore = create<RoverStore>((set) => ({
   },
   clearDetailsViewFileUuid: () => {
     set(() => ({ detailsViewFileUuid: "" }))
+  },
+  fsEventStatus: "rover-analyzer",
+  setFsEventStatus: (status) => {
+    set(() => ({ fsEventStatus: status }))
+  },
+  clearFsEventStatus: () => {
+    set(() => ({ fsEventStatus: "" }))
   },
 }))
 

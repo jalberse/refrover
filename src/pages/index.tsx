@@ -2,6 +2,7 @@ import { addWatchedDirectory } from "@/api"
 import AssetDetails from "@/components/AssetDetails"
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
+import StatusBar from "@/components/StatusBar"
 import useRoverStore from "@/hooks/store"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import Head from "next/head"
@@ -84,6 +85,7 @@ export const Home: React.FC = () => {
             </>
           )}
         </PanelGroup>
+        <StatusBar />
       </main>
 
       <footer />

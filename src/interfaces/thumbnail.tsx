@@ -1,4 +1,4 @@
-interface Thumbnail {
+type Thumbnail = {
   uuid: string
   file_uuid: string
   path: string
