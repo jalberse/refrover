@@ -3,6 +3,7 @@ import AssetDetails from "@/components/AssetDetails"
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
 import StatusBar from "@/components/StatusBar"
+import WatchedDirectories from "@/components/WatchedDirectories"
 import useRoverStore from "@/hooks/store"
 import { useGlobalShortcut } from "@/hooks/tauri/shortcuts"
 import Head from "next/head"
@@ -35,6 +36,13 @@ export const Home: React.FC = () => {
     void addWatchedDirectory("D:\\refrover_photos", true)
   }, [])
 
+  // TODO Limit the extent to which these panel groups can be resized.
+  //      In the future maybe we want a more robust panel system,
+  //      and e.g. make the search results column count change based on its panel
+  //      size rather than the viewport (I tried following the docs on that,
+  //      didn't quite work). But for now, just enforce our recommended layout and
+  //      allow reasonable resizing.
+
   return (
     <div className="flex flex-col bg-white">
       <Head>
@@ -58,6 +66,7 @@ export const Home: React.FC = () => {
         >
           <Panel id="LeftPanel" order={0} defaultSize={25}>
             <div className="flex-1 overflow-auto px-4 h-full">
+              <WatchedDirectories />
               <button onClick={addDirTest} type="button">
                 Add Directory
               </button>
