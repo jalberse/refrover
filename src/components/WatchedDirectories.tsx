@@ -15,6 +15,7 @@ const WatchedDirectories: React.FC = () => {
     return Math.floor(Math.random() * 1000000)
   }
 
+  // TODO We want to allow multiple directories to be added at once.
   const addDirectory = async () => {
     const selectedPath = await open({
       directory: true,

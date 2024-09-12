@@ -43,6 +43,8 @@ export const Home: React.FC = () => {
   //      didn't quite work). But for now, just enforce our recommended layout and
   //      allow reasonable resizing.
 
+  // TODO We'll have a tags component/panel below the Watched Directories panel.
+
   return (
     <div className="flex flex-col bg-white">
       <Head>

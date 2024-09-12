@@ -61,7 +61,7 @@ const WatchedDirectoriesList: React.FC<WatchedDirectoriesListProps> = ({
               cursor: "pointer",
             }}
           >
-            <td style={{ padding: "8px", border: "1px solid #ddd" }}>
+            <td style={{ padding: "1px", border: "1px solid #ddd" }}>
               {directory.path}
             </td>
           </tr>
