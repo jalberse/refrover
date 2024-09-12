@@ -192,7 +192,7 @@ pub async fn add_watched_directory(
         return Err(anyhow::anyhow!("Directory {:?} does not exist, or is not a directory", directory_path).into());
     }
 
-    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), "D:\\refrover_photos", true).into_ta_result()?;
+    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, true).into_ta_result()?;
 
     // TODO consider adding watcher last, at least after we've inserted the base dir.
     //   otherwise it might start trying to add files to a base dir that doesn't exist, or query for
@@ -219,3 +219,7 @@ pub async fn add_watched_directory(
     //      TODO - We might need it to be an Arc<Mutex> though, not just a Mutex.
     Ok(())
 }
+
+// TODO delete_watched_directory
+//      Remove it and contained files from the database, and stop watching it.
+// TODO *add this to commands in main*.
