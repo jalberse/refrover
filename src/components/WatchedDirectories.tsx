@@ -15,11 +15,11 @@ const WatchedDirectories: React.FC = () => {
     return Math.floor(Math.random() * 1000000)
   }
 
-  // TODO We want to allow multiple directories to be added at once.
+  // TODO Actually tell backend to add it as a watched directory
   const addDirectory = async () => {
     const selectedPath = await open({
       directory: true,
-      multiple: false,
+      multiple: true,
       title: "Select a directory",
     })
 
@@ -30,8 +30,16 @@ const WatchedDirectories: React.FC = () => {
       }
       setDirectories([...directories, newDirectory])
     }
+    if (selectedPath && Array.isArray(selectedPath)) {
+      const newDirectories = selectedPath.map((path) => ({
+        id: generateUniqueId(),
+        path,
+      }))
+      setDirectories([...directories, ...newDirectories])
+    }
   }
 
+  // TODO Actually tell the backend to remove the directory
   const removeDirectory = (id: number) => {
     const newDirectories = directories.filter(
       (directory) => directory.id !== id,
