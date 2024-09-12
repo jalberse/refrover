@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 import type React from "react"
 import { useRef, useState } from "react"
+import WatchedDirectoriesList from "./WatchedDirectoriesList"
 
 declare module "react" {
   interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
@@ -10,7 +11,7 @@ declare module "react" {
   }
 }
 
-interface Directory {
+export type Directory = {
   id: number
   path: string
 }
@@ -33,8 +34,6 @@ const WatchedDirectories: React.FC = () => {
       }
       setDirectories([...directories, newDirectory])
     }
-    // Clear the input value to allow re-selection of the same directory
-    event.target.value = ""
   }
 
   const removeDirectory = (id: number) => {
@@ -53,22 +52,10 @@ const WatchedDirectories: React.FC = () => {
   return (
     <div className="watched-directories">
       <h2>Watched Directories</h2>
-      <ul>
-        {directories.map((directory) => (
-          <li key={directory.id} className="flex justify-between items-center">
-            <span>{directory.path}</span>
-            <button
-              type="button"
-              className="bg-red-500 text-white px-2 py-1 rounded"
-              onClick={() => {
-                removeDirectory(directory.id)
-              }}
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
+      <WatchedDirectoriesList
+        directories={directories}
+        removeDirectory={removeDirectory}
+      />
       <button
         type="button"
         className="bg-blue-500 text-white rounded mt-4"
