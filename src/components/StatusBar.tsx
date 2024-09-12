@@ -1,29 +1,27 @@
-// TODO We'll want a status bar that runs across the bottom of the screen.
-// At first, this can be used just for displaying the status of handling new photos etc.
+"use client"
 
 import useRoverStore from "@/hooks/store"
 import { listen } from "@tauri-apps/api/event"
 import type React from "react"
+import { useEffect } from "react"
 import type Payload from "../interfaces/Payload"
 
 async function startListener() {
   await listen<Payload>("fs-event", (event) => {
-    // TODO Why am I getting this? We are able to set it fine from rust (yay!) but this is new.
-    //ReferenceError: window is not defined
-    // at uid (file:///D:/projects/RefRover/refrover/node_modules/.pnpm/@tauri-apps+api@1.5.6/node_modules/@tauri-apps/api/tauri.js:6:5)
-    //   at transformCallback (file:///D:/projects/RefRover/refrover/node_modules/.pnpm/@tauri-apps+api@1.5.6/node_modules/@tauri-apps/api/tauri.js:17:24)
-    //   at listen (file:///D:/projects/RefRover/refrover/node_modules/.pnpm/@tauri-apps+api@1.5.6/node_modules/@tauri-apps/api/helpers/event.js:58:22)
-    //   at listen (file:///D:/projects/RefRover/refrover/node_modules/.pnpm/@tauri-apps+api@1.5.6/node_modules/@tauri-apps/api/event.js:59:12)
-    //   at startListener (webpack-internal:///./src/components/StatusBar.tsx:19:72)
-    //   at StatusBar (webpack-internal:///./src/components/StatusBar.tsx:28:5)
+    // TODO Rather than just setting text from the backend, I'd rather have an enum of statuses
+    // and have the frontend choose how they are rendered.
+    // I want a "rover-analyzer (checkmark)" status, and a "rover-analyzer (spinner)" status when
+    // it's doing work.
     useRoverStore.setState({ fsEventStatus: event.payload.message })
   })
 }
 
 const StatusBar: React.FC = () => {
-  startListener().catch((error: unknown) => {
-    console.error(error)
-  })
+  useEffect(() => {
+    startListener().catch((error: unknown) => {
+      console.error(error)
+    })
+  }, [])
 
   const fsEventStatus: string = useRoverStore((state) => state.fsEventStatus)
 

@@ -6,7 +6,7 @@ use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind,
 use tauri::Manager;
 use uuid::Uuid;
 
-use crate::{ann, error::Error, queries, state::{ClipState, ConnectionPoolState, SearchState}};
+use crate::{ann, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}};
 
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
 pub struct FsEventHandler
@@ -17,7 +17,18 @@ pub struct FsEventHandler
 impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
     fn handle_event(&mut self, result: DebounceEventResult) {
 
-        // TODO We'll want to notify the frontend of the event so we can update the status bar UI at the bottom.
+        // TODO Consider file system ids:
+        // https://docs.rs/file-id/0.2.1/file_id/index.html
+
+        info!("Handling events...");
+        let emit_result = self.app_handle.emit_all("fs-event", Payload { message: "analyzing...".to_string() });
+        if emit_result.is_err()
+        {
+            error!("Error emitting fs-event: {:?}", emit_result);
+        }
+
+        // TODO On release ~200 images are taking *five seconds* to process?
+        // Slower than I would think. I suppose we could investigate later.
 
         match result {
             Ok(events) => {
@@ -25,6 +36,8 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                 // 1. `remove` or `move out` event
                 // 2. `rename` event.
                 // 3. Other events
+
+                info!("Event count: {:?}", events.len());
 
                 // Acts as a one-element-stack for the last `rename from` event,
                 // so that the following `rename to` event can be processed.
@@ -56,7 +69,12 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
             Err(e) => error!("Error handling event: {:?}", e),
         }
 
-        // TODO Notify frontend again to let it know that we're done processing the event(s).
+        info!("Done handling events.");
+        let emit_result = self.app_handle.emit_all("fs-event", Payload { message: "rover-analyzer".to_string() });
+        if emit_result.is_err()
+        {
+            error!("Error emitting fs-event: {:?}", emit_result);
+        }
     }
 }
 
@@ -151,7 +169,7 @@ impl FsEventHandler {
                 // Intentionally ignore Modify::Any. 
                 // It triggers after a Create when copying files (at least on Windows).
                 // If there is a scenario where we should handle it, we can determine that from logs.
-                info!("ModifyKind::Any: {:?}", debounced_event);
+                // info!("ModifyKind::Any: {:?}", debounced_event);
             },
             ModifyKind::Data(_) =>{
                 // TODO Editing a photo in some programs e.g. Clip Studio Paint will actually result in a Remove/Create pair,

@@ -25,7 +25,6 @@ use log::info;
 use log::LevelFilter;
 use tauri::Manager;
 use tauri_plugin_log::LogTarget;
-use app::interface::Payload;
 
 #[cfg(debug_assertions)]
 // Note that Trace level causes massive slowdowns due to I/O in HNSW.
@@ -33,8 +32,7 @@ const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 #[cfg(not(debug_assertions))]
 const LOG_LEVEL: LevelFilter = LevelFilter::Warn;
 
-// TODO Fiddle with this to get as responsive as we can while still batch processing the FS events reasonably.
-const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(200);
+const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
 
 fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
