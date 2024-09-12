@@ -1,5 +1,5 @@
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Directory } from "./WatchedDirectories"
 
 type WatchedDirectoriesListProps = {
@@ -14,8 +14,7 @@ const WatchedDirectoriesList: React.FC<WatchedDirectoriesListProps> = ({
   const [selectedDirectoryId, setSelectedDirectoryId] = useState<number | null>(
     null,
   )
-
-  // TODO If the user clicks off somewhere else, the selected row should be deselected.
+  const tableRef = useRef<HTMLTableElement>(null)
 
   const handleRowClick = (id: number) => {
     setSelectedDirectoryId(id)
@@ -35,8 +34,25 @@ const WatchedDirectoriesList: React.FC<WatchedDirectoriesListProps> = ({
     }
   }, [removeDirectory, selectedDirectoryId])
 
+  // Allow the user to click off the table to deselect the row
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        tableRef.current &&
+        !tableRef.current.contains(event.target as Node)
+      ) {
+        setSelectedDirectoryId(null)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <table ref={tableRef} style={{ width: "100%", borderCollapse: "collapse" }}>
       <tbody>
         {directories.map((directory, index) => (
           <tr
