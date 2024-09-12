@@ -1,15 +1,7 @@
-/* eslint-disable @typescript-eslint/consistent-type-definitions */
+import { open } from "@tauri-apps/api/dialog"
 import type React from "react"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import WatchedDirectoriesList from "./WatchedDirectoriesList"
-
-declare module "react" {
-  interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
-    // extends React's HTMLAttributes
-    directory?: string
-    webkitdirectory?: string
-  }
-}
 
 export type Directory = {
   id: number
@@ -18,19 +10,22 @@ export type Directory = {
 
 const WatchedDirectories: React.FC = () => {
   const [directories, setDirectories] = useState<Directory[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const generateUniqueId = () => {
     return Math.floor(Math.random() * 1000000)
   }
 
-  const addDirectory = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (files) {
-      const directoryPath = files[0].webkitRelativePath.split("/")[0] // Get the directory name
+  const addDirectory = async () => {
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Select a directory",
+    })
+
+    if (selectedPath && typeof selectedPath === "string") {
       const newDirectory: Directory = {
         id: generateUniqueId(),
-        path: directoryPath,
+        path: selectedPath,
       }
       setDirectories([...directories, newDirectory])
     }
@@ -43,33 +38,22 @@ const WatchedDirectories: React.FC = () => {
     setDirectories(newDirectories)
   }
 
-  const handleAddButtonClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click()
-    }
-  }
-
   return (
-    <div className="watched-directories">
-      <h2>Watched Directories</h2>
+    <div>
+      <button
+        type="button"
+        onClick={() => {
+          // IIFE
+          void (async () => {
+            await addDirectory()
+          })()
+        }}
+      >
+        Add Directory
+      </button>
       <WatchedDirectoriesList
         directories={directories}
         removeDirectory={removeDirectory}
-      />
-      <button
-        type="button"
-        className="bg-blue-500 text-white rounded mt-4"
-        onClick={handleAddButtonClick}
-      >
-        +
-      </button>
-      <input
-        ref={fileInputRef}
-        type="file"
-        directory=""
-        webkitdirectory=""
-        className="hidden"
-        onChange={addDirectory}
       />
     </div>
   )

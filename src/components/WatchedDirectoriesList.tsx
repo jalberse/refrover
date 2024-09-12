@@ -15,6 +15,8 @@ const WatchedDirectoriesList: React.FC<WatchedDirectoriesListProps> = ({
     null,
   )
 
+  // TODO If the user clicks off somewhere else, the selected row should be deselected.
+
   const handleRowClick = (id: number) => {
     setSelectedDirectoryId(id)
   }
