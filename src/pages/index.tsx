@@ -30,10 +30,10 @@ export const Home: React.FC = () => {
   const isDetailsViewOpen = detailsViewFileUuid !== ""
 
   // Create a callback function that calls addWatchedDirectory with a hardcoded directory path
-  // and a recursive flag of true.
   // We'll call this with a button click
+  // TODO delete this!!!!
   const addDirTest = useCallback(() => {
-    void addWatchedDirectory("D:\\refrover_photos", true)
+    void addWatchedDirectory("D:\\refrover_photos")
   }, [])
 
   // TODO Limit the extent to which these panel groups can be resized.

@@ -167,6 +167,7 @@ impl Clip
         )
     }
 
+    // TODO This is awkward to call, we do weird maps. Just take the UUID and query for the path.
     /// Encodes the images with the given Uuids and paths and saves the feature vectors to the database.
     pub fn encode_image_files(&self, files: &[(Uuid, PathBuf)], connection: &mut SqliteConnection) -> anyhow::Result<()>
     {

@@ -73,14 +73,10 @@ export async function fetchThumbnails(fileIds: FileUuid[]) {
   }
 }
 
-export async function addWatchedDirectory(
-  directoryPath: string,
-  recursive: boolean,
-) {
+export async function addWatchedDirectory(directoryPath: string) {
   try {
     await invoke("add_watched_directory", {
       directoryPath,
-      recursive,
     })
       .catch((error: unknown) => {
         console.error("Error adding watched directory:", error)

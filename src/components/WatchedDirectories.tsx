@@ -16,6 +16,7 @@ const WatchedDirectories: React.FC = () => {
   }
 
   // TODO Actually tell backend to add it as a watched directory
+  //      Watch - do we need to sanitize? Or like, correct slashes and stuff?
   const addDirectory = async () => {
     const selectedPath = await open({
       directory: true,
@@ -39,6 +40,7 @@ const WatchedDirectories: React.FC = () => {
     }
   }
 
+  // TODO We probably want a confirmation dialog here?
   // TODO Actually tell the backend to remove the directory
   const removeDirectory = (id: number) => {
     const newDirectories = directories.filter(

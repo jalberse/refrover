@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
+use diesel::sqlite::Sqlite;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -595,6 +596,15 @@ pub fn get_base_dir_id(base_dir: &str, connection: &mut SqliteConnection) -> any
    }
 }
 
+pub fn base_dir_exists(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<bool>
+{
+   let id = get_base_dir_id(base_dir, connection)?;
+   match id {
+      Some(_) => Ok(true),
+      None => Ok(false)
+   }
+}
+
 pub fn get_file_id_from_base_dir_and_relative_path(base_dir: &Uuid, rel_path: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
 {
    use crate::schema::files;
@@ -698,6 +708,36 @@ pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> any
       .execute(connection)?;
 
    Ok(result)
+}
+
+// In the case where we know the base directory ID, we can insert files directly.
+pub fn insert_files_rows(files_rows: &[NewFileOwned], connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::files;
+
+   diesel::insert_into(files::table)
+      .values(files_rows)
+      .execute(connection)?;
+
+   Ok(())
+}
+
+/// Returns the UUID of the new base directory.
+pub fn insert_base_directory(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<Uuid>
+{
+   use crate::schema::base_directories;
+
+   let base_dir_id = Uuid::new_v4();
+   let new_base_directory = crate::models::NewBaseDirectory {
+      id: &base_dir_id.to_string(),
+      path: base_dir,
+   };
+
+   diesel::insert_into(base_directories::table)
+      .values(new_base_directory)
+      .execute(connection)?;
+
+   Ok(base_dir_id)
 }
 
 pub fn delete_base_directory(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>

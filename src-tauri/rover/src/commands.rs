@@ -4,6 +4,7 @@ use notify_debouncer_full::notify::{RecursiveMode, Watcher};
 use tauri::Manager;
 use uuid::Uuid;
 
+use crate::models::NewFileOwned;
 use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState};
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
@@ -172,54 +173,119 @@ pub async fn fetch_metadata(
     Ok(metadata)
 }
 
+/// Note that this does not handle recursive watching of subdirectories.
+/// If the user wants to watch subdirectories, the front-end should construct that set of
+/// directories and invoke this command for each one.
 #[tauri::command]
 pub async fn add_watched_directory(
     directory_path: String,
-    recursive: bool,
     watcher_state: tauri::State<'_, FsWatcherState>,
     clip_state: tauri::State<'_, ClipState>,
+    pool_state: tauri::State<'_, ConnectionPoolState>,
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
-    // TODO Ensure that if the directory is already added, we don't add it again.
-    //      Consider recursive as well?
-
-    app_handle.emit_all("fs-event", Payload { message: format!("Adding directory {:?}", directory_path) }).into_ta_result()?;
-
     let directory_path = std::path::Path::new(&directory_path);
-
+    
     if !directory_path.is_dir() {
         return Err(anyhow::anyhow!("Directory {:?} does not exist, or is not a directory", directory_path).into());
     }
 
+    let mut connection = pool_state.get_connection().into_ta_result()?;
+    if queries::base_dir_exists(
+            directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?,
+            &mut connection
+        ).into_ta_result()? {
+        return Err(anyhow::anyhow!("Attempted to add Directory {:?}, which is already in the database.", directory_path).into());
+    }
+
     tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, true).into_ta_result()?;
 
-    // TODO consider adding watcher last, at least after we've inserted the base dir.
-    //   otherwise it might start trying to add files to a base dir that doesn't exist, or query for
-    //   one that doesn't exist.
-    // TODO also, we probably need an index on the base dir path? So we can search for it.
-    //   OR we can somehow inform the FsEventHandler of some mapping of watched dirs to their IDs in some way
+    // Start watching the directory for new files
     let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
-    let recursive_mode: RecursiveMode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
-    watcher_debouncer.watcher().watch(directory_path, recursive_mode).into_ta_result()?;
+    watcher_debouncer.watcher().watch(directory_path, RecursiveMode::NonRecursive).into_ta_result()?;
 
-    println!("Added directory {:?}", directory_path);
 
-    // TODO We could test our FsEventHandler logic now. Probably do this first.
-    //      Just spoof adding a new watched directory (hardcode) and check out if logs/prints are working like I would expect
-    //      as we add/remove files/dirs from the watched directory.
-    //      Once that's working we can pretty confidently move forward.
+    let base_dir_uuid = queries::insert_base_directory(
+        &directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string")).into_ta_result()?,
+        &mut connection
+    ).into_ta_result()?;
 
-    // TODO Add the base directory to the DB.
-    // TODO If recursive, add all subdirectories to the DB.
-    // TODO And for each added directory... add its files in the directory to the DB.
-    // TODO And kick off encoding for those files, maybe in a new background thread?
-    //      clip_state is already in a Mutex, so we can lock it while we process.
-    //      As long as we don't block the main thread, we should be fine.
-    //      TODO - We might need it to be an Arc<Mutex> though, not just a Mutex.
+    // Add its files in the directory to the DB.
+    let files = std::fs::read_dir(directory_path).into_ta_result()?;
+    // Filter to only files. We will ignore any path that is not a file (directories, symlinks, etc.)
+    let files = files.filter_map(|x| x.ok()).filter(|x| x.file_type().into_ta_result().ok().map(|y| y.is_file()).unwrap_or(false));
+
+    let mut to_encode = Vec::new();
+    let new_file_rows: Vec<NewFileOwned> = files.map(|x| -> anyhow::Result<NewFileOwned> {
+        let file_path = x.path();
+        let file_path_str = file_path.to_str().ok_or(anyhow::anyhow!("Unable to convert file path to string")).into_ta_result()?;
+        
+        let file_uuid = Uuid::new_v4();
+
+        to_encode.push((file_uuid, x.path().to_path_buf()));
+        
+        Ok(NewFileOwned
+        {
+            id: file_uuid.to_string(),
+            base_directory_id: base_dir_uuid.to_string(),
+            relative_path: file_path_str.to_string(),
+        })
+    }).collect::<Result<Vec<NewFileOwned>, anyhow::Error>>()?;
+
+    queries::insert_files_rows(&new_file_rows, &mut connection).into_ta_result()?;
+
+    // Encode images and store results in the DB.
+    // Note this is relatively long-running; this command is async, so it will not block the main thread.
+    // But it's a good idea to keep this as the last step in the command so other tables are updated quickly.
+    {
+        let clip_state = clip_state.0.lock().unwrap();
+        let clip = &clip_state.clip;
+        clip.encode_image_files(&to_encode, &mut connection)?;
+    }
+
     Ok(())
 }
 
 // TODO delete_watched_directory
 //      Remove it and contained files from the database, and stop watching it.
+//      let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
+//      watcher_debouncer.watcher().unwatch(path).into_ta_result()?;
 // TODO *add this to commands in main*.
+
+#[tauri::command]
+pub async fn delete_watched_directory(
+    directory_path: String,
+    watcher_state: tauri::State<'_, FsWatcherState>,
+    clip_state: tauri::State<'_, ClipState>,
+    pool_state: tauri::State<'_, ConnectionPoolState>,
+    app_handle: tauri::AppHandle,
+) -> TAResult<()>
+{
+    // I'm considering having some system where we track deleted dirs/files/encodings,
+    // so if they get added back easily? But that adds complexity to the simple case of just
+    // straightforwardly adding/deleting things. Just go simple for now.
+    
+    let directory_path = std::path::Path::new(&directory_path);
+
+    let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
+    watcher_debouncer.watcher().unwatch(directory_path).into_ta_result()?;
+
+    // TODO Get the contained files (from the DB)
+    
+    // TODO Look at what we can share with notify_handlers...
+    //      After all we're just removing a set of files. Basically the same work.
+
+    // TODO Delete the edges of contained files
+    
+    // TODO Delete failed encodings
+    
+    // TODO Delete the encodings of contained files
+
+    // TODO Delete thumbnails of contained files
+    //      In the DB and on the filesystem
+
+    // TODO Delete the dir from the DB
+
+    Ok(())
+}
