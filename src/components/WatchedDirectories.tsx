@@ -11,6 +11,7 @@ export type Directory = {
 
 const WatchedDirectories: React.FC = () => {
   // TODO We need to fetch the initial set of watched directories from the backend
+  // TODO Note we may add directories if we e.g. drag files from file explorer in (we'd add its parent)
   const [directories, setDirectories] = useState<Directory[]>([])
   const prevDirectoriesRef = useRef<Directory[]>([])
 
