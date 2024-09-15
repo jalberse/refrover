@@ -1,6 +1,7 @@
 use anyhow::Context;
 use log::info;
 use notify_debouncer_full::notify::{RecursiveMode, Watcher};
+use tauri::api::file;
 use tauri::Manager;
 use uuid::Uuid;
 
@@ -115,8 +116,11 @@ pub async fn fetch_metadata(
     let uuid = Uuid::parse_str(&file_id).into_ta_result()?;
     let mut connection = db::get_db_connection(&pool_state)?;
 
-    let filepath = queries::get_filepath(uuid, &mut connection)?
-        .ok_or(anyhow::anyhow!("File not found for UUID {:?}", uuid)).into_ta_result()?;
+    let filepath = queries::get_filepaths(&[uuid], &mut connection)?;
+    if filepath.is_empty() {
+        return Err(anyhow::anyhow!("File not found for file_id: {}", file_id).into());
+    }
+    let filepath = &filepath[0].clone().1;
     
     // Get the thumbnail filepath - the thumbnail should typically exist by this point, but we ensure it here.
     let (_, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
@@ -185,6 +189,26 @@ pub async fn add_watched_directory(
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
+    // TODO Consider if we want to make watched directories recursive.
+    //      I strongly suspect we do - we'd want to drop folders into a top level scheme and have access.
+    // If we do so, then when the user wants to add a new watched dir to their list, we should stop
+    //      them if it is already watched via an ancestor directory and disallow it.
+    //      That makes the user story pretty simple I think? Just add all the top level dirs they want to watched.
+    //      They can drag and drop files and folders into it.
+    //      Just iterate over the existing watched dirs and check starts_with(), I think?
+    // And we'd need to handle that recursive stuff in the remove_watched_directory command as well.
+
+    // TODO If we do make them recursive, consider making watched directories and base directories separate concepts in the DB.
+    //      A based directory may be watched recursively, but it's not the root that's passed to the watcher.
+
+    // TODO Consider that base directories save ~zero space. Windows allows 260 bytes for file paths, e.g.
+    //      Even with 10k images, that's just 2.6 MB. Removing redundant data (shared prefixes) is just *not* worth the hassle.
+    //      Before, it was vaguely worth it because I conceptualized base directories as watched directories, partially,
+    //      so saying "grab everything in this directory" or "delete all of these" made a bit more sense.
+    //      But with recursively watched directories (which I think we want), then the "relative path" includes the path up to some prefix,
+    //      including potentially a lot of intermediary folders.
+    //      I think things just get conceptually simpler if files stored the absolute filepath.
+
     let directory_path = std::path::Path::new(&directory_path);
     
     if !directory_path.is_dir() {
@@ -205,34 +229,34 @@ pub async fn add_watched_directory(
     let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
     watcher_debouncer.watcher().watch(directory_path, RecursiveMode::NonRecursive).into_ta_result()?;
 
-
     let base_dir_uuid = queries::insert_base_directory(
         &directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string")).into_ta_result()?,
         &mut connection
     ).into_ta_result()?;
 
+    
     // Add its files in the directory to the DB.
     let files = std::fs::read_dir(directory_path).into_ta_result()?;
     // Filter to only files. We will ignore any path that is not a file (directories, symlinks, etc.)
     let files = files.filter_map(|x| x.ok()).filter(|x| x.file_type().into_ta_result().ok().map(|y| y.is_file()).unwrap_or(false));
-
-    let mut to_encode = Vec::new();
+    
+    let mut file_ids = Vec::with_capacity(files.size_hint().0);
     let new_file_rows: Vec<NewFileOwned> = files.map(|x| -> anyhow::Result<NewFileOwned> {
-        let file_path = x.path();
-        let file_path_str = file_path.to_str().ok_or(anyhow::anyhow!("Unable to convert file path to string")).into_ta_result()?;
-        
         let file_uuid = Uuid::new_v4();
-
-        to_encode.push((file_uuid, x.path().to_path_buf()));
+        let binding = x.path().clone();
+        let file_relative_path = binding.strip_prefix(directory_path).into_ta_result()?;
+        let file_path_str = file_relative_path.to_str().ok_or(anyhow::anyhow!("Unable to convert file path to string")).into_ta_result()?;        
+        
+        file_ids.push(file_uuid);
         
         Ok(NewFileOwned
-        {
-            id: file_uuid.to_string(),
-            base_directory_id: base_dir_uuid.to_string(),
-            relative_path: file_path_str.to_string(),
-        })
-    }).collect::<Result<Vec<NewFileOwned>, anyhow::Error>>()?;
-
+            {
+                id: file_uuid.to_string(),
+                base_directory_id: base_dir_uuid.to_string(),
+                relative_path: file_path_str.to_string(),
+            })
+        }).collect::<Result<Vec<NewFileOwned>, anyhow::Error>>()?;
+        
     queries::insert_files_rows(&new_file_rows, &mut connection).into_ta_result()?;
 
     // Encode images and store results in the DB.
@@ -241,23 +265,17 @@ pub async fn add_watched_directory(
     {
         let clip_state = clip_state.0.lock().unwrap();
         let clip = &clip_state.clip;
-        clip.encode_image_files(&to_encode, &mut connection)?;
+        clip.encode_image_files(&file_ids, &mut connection)?;
     }
 
     Ok(())
 }
 
-// TODO delete_watched_directory
-//      Remove it and contained files from the database, and stop watching it.
-//      let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
-//      watcher_debouncer.watcher().unwatch(path).into_ta_result()?;
-// TODO *add this to commands in main*.
-
+/// Deletes a watched directory and all its contents from the database.
 #[tauri::command]
 pub async fn delete_watched_directory(
     directory_path: String,
     watcher_state: tauri::State<'_, FsWatcherState>,
-    clip_state: tauri::State<'_, ClipState>,
     pool_state: tauri::State<'_, ConnectionPoolState>,
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
@@ -265,27 +283,24 @@ pub async fn delete_watched_directory(
     // I'm considering having some system where we track deleted dirs/files/encodings,
     // so if they get added back easily? But that adds complexity to the simple case of just
     // straightforwardly adding/deleting things. Just go simple for now.
-    
+
     let directory_path = std::path::Path::new(&directory_path);
 
     let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
     watcher_debouncer.watcher().unwatch(directory_path).into_ta_result()?;
 
-    // TODO Get the contained files (from the DB)
-    
-    // TODO Look at what we can share with notify_handlers...
-    //      After all we're just removing a set of files. Basically the same work.
+    let mut connection = pool_state.get_connection().into_ta_result()?;
+    let base_dir_uuid = queries::get_base_dir_id(
+        directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?,
+        &mut connection
+    ).into_ta_result()?;
 
-    // TODO Delete the edges of contained files
-    
-    // TODO Delete failed encodings
-    
-    // TODO Delete the encodings of contained files
+    if base_dir_uuid.is_none() {
+        info!("Directory {:?} not found in the database. Nothing to do.", directory_path);
+        return Ok(()); // Nothing to do
+    }
+    let base_dir_uuid = base_dir_uuid.unwrap();
 
-    // TODO Delete thumbnails of contained files
-    //      In the DB and on the filesystem
-
-    // TODO Delete the dir from the DB
-
+    queries::delete_base_directory_cascade(&[base_dir_uuid], &mut connection, app_handle)?;
     Ok(())
 }

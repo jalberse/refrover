@@ -74,10 +74,14 @@ pub fn ensure_thumbnail_exists(
 
     // Create the thumbnail + save it.
     // We do expect the file to exist by this point, so it's an error if it doesn't.
-    let file_path = queries::get_filepath(file_id, &mut connection)?.ok_or(anyhow::anyhow!("File not found for UUID {:?}", file_id))?;
+    let file_path = queries::get_filepaths(&[file_id], &mut connection)?;
+    if file_path.is_empty() {
+        return Err(anyhow::anyhow!("File not found for file_id: {}", file_id));
+    }
+    let file_path = &file_path[0].clone().1;
 
     // Load exif data to determine image rotation, if applicable
-    let file = std::fs::File::open(&file_path)?;
+    let file = std::fs::File::open(file_path)?;
     let mut bufreader = std::io::BufReader::new(file);
     let exifreader = exif::Reader::new();
     let exif = exifreader.read_from_container(&mut bufreader)?;

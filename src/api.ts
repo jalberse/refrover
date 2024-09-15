@@ -88,3 +88,19 @@ export async function addWatchedDirectory(directoryPath: string) {
     console.error("Error adding watched directory:", error)
   }
 }
+
+export async function deleteWatchedDirectory(directoryPath: string) {
+  try {
+    await invoke("delete_watched_directory", {
+      directoryPath,
+    })
+      .catch((error: unknown) => {
+        console.error("Error removing watched directory:", error)
+      })
+      .then(() => {
+        console.log("Successfully removed watched directory")
+      })
+  } catch (error) {
+    console.error("Error removing watched directory:", error)
+  }
+}

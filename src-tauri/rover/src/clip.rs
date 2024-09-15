@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::models::{NewFailedEncoding, NewImageFeaturesVitL14336Px};
 use crate::preprocessing::{self, FEATURE_VECTOR_LENGTH};
+use crate::queries;
 
 pub struct ForwardResults
 {
@@ -169,7 +170,7 @@ impl Clip
 
     // TODO This is awkward to call, we do weird maps. Just take the UUID and query for the path.
     /// Encodes the images with the given Uuids and paths and saves the feature vectors to the database.
-    pub fn encode_image_files(&self, files: &[(Uuid, PathBuf)], connection: &mut SqliteConnection) -> anyhow::Result<()>
+    pub fn encode_image_files(&self, files: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
     {
         // TODO I think we'll need to pre-validate images before sending to GPU?
         //        Our "failed encodings" only covers files that fail to load as images,
@@ -181,6 +182,8 @@ impl Clip
         use crate::schema::image_features_vit_l_14_336_px;
         use crate::schema::failed_encodings;
         
+        let files = queries::get_filepaths(files, connection)?;
+
         // Encode images with CLIP and add encodings to the database
         for chunk in files.chunks(32)
         {

@@ -150,6 +150,7 @@ fn main() -> anyhow::Result<()> {
             app::commands::fetch_thumbnails,
             app::commands::fetch_metadata,
             app::commands::add_watched_directory,
+            app::commands::delete_watched_directory,
             ])
         .run(tauri::generate_context!())?;
 

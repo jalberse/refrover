@@ -7,9 +7,9 @@ use std::path::PathBuf;
 use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
-use diesel::sqlite::Sqlite;
 use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
 use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
@@ -554,30 +554,47 @@ pub fn delete_thumbnail_by_id(thumbnail_id: Uuid, connection: &mut SqliteConnect
    Ok(())
 }
 
-pub fn get_filepath(file_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<Option<PathBuf>>
+pub fn delete_thumbnails_by_file_ids(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::thumbnails;
+
+   diesel::delete(thumbnails::table.filter(thumbnails::file_id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
+      .execute(connection)?;
+
+   Ok(())
+}
+
+pub fn get_thumbnail_filepaths_by_file_ids(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<String>>
+{
+   use crate::schema::thumbnails;
+
+   let paths: Vec<String> = thumbnails::table
+      .select(thumbnails::path)
+      .filter(thumbnails::file_id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
+      .load(connection)?;
+
+   Ok(paths)
+}
+
+pub fn get_filepaths(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
 {
    use crate::schema::files;
    use crate::schema::base_directories;
 
-   let paths: Option<(String, String)> = files::table
-      .filter(files::id.eq(file_id.to_string()))
+   let paths: Vec<(String, String, String)> = files::table
+      .filter(files::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
       .inner_join(base_directories::table)
-      .select((base_directories::path, files::relative_path))
-      .first(connection)
-      .optional()?;
+      .select((files::id, base_directories::path, files::relative_path))
+      .load(connection)?;
 
-   // Note that not finding a filepath is not an error per se; it just means the file isn't in the database.
-   // We return None in this case.
-   // The caller can determine if that is an error. We only return an error if there is a problem with the query. 
-   match paths {
-      None => return Ok(None),
-      Some(paths) => {
-         let (base_dir, rel_path): (String, String) = paths;
-         let base_dir = PathBuf::from(base_dir);
-         let rel_path = PathBuf::from(rel_path);
-         Ok(Some(base_dir.join(rel_path)))
-      }
-   }
+   let out = paths.into_iter().map(|(file_id, base_dir, rel_path)| {
+      let base_dir = PathBuf::from(base_dir);
+      let rel_path = PathBuf::from(rel_path);
+      // Unwrap should be safe; we know we just parsed it from a UUID retrieving it.
+      (Uuid::parse_str(&file_id).unwrap(), base_dir.join(rel_path))
+   }).collect();
+
+   Ok(out)
 }
 
 pub fn get_base_dir_id(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
@@ -603,6 +620,19 @@ pub fn base_dir_exists(base_dir: &str, connection: &mut SqliteConnection) -> any
       Some(_) => Ok(true),
       None => Ok(false)
    }
+}
+
+pub fn get_files_in_directories(base_dir_uuids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<Uuid>>
+{
+   use crate::schema::files;
+
+   let file_ids: Vec<String> = files::table
+      .select(files::id)
+      .filter(files::base_directory_id.eq_any(base_dir_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
+      .load(connection)?;
+
+   let file_ids = file_ids.into_iter().map(|file_id| Uuid::parse_str(&file_id).unwrap()).collect();
+   Ok(file_ids)
 }
 
 pub fn get_file_id_from_base_dir_and_relative_path(base_dir: &Uuid, rel_path: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
@@ -740,51 +770,90 @@ pub fn insert_base_directory(base_dir: &str, connection: &mut SqliteConnection) 
    Ok(base_dir_id)
 }
 
-pub fn delete_base_directory(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
+fn delete_base_directories(base_dirs: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::base_directories;
 
-   diesel::delete(base_directories::table.filter(base_directories::path.eq(base_dir)))
+   let base_dir_id_strings = base_dirs.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+
+   diesel::delete(base_directories::table.filter(base_directories::id.eq_any(base_dir_id_strings)))
       .execute(connection)?;
 
    Ok(())
 }
 
-pub fn delete_file(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+fn delete_files(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::files;
 
-   diesel::delete(files::table.filter(files::id.eq(file_id.to_string())))
+   diesel::delete(files::table.filter(files::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
       .execute(connection)?;
 
    Ok(())
 }
 
-pub fn delete_encodings(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+/// Deletes the given files from the database, cascading to resolve orphaned foreign keys
+/// (in e.g. tag_edges, thumbnails, and encodings).
+/// We don't use ON DELETE CASCADE to maintain greater control over the process, e.g.
+/// to delete thumbnails from the disk during the deletion process as well (though you *could*
+/// do so with ON DELETE CASCADE enabled). It's a choice to be more explicit in calling code.
+/// (And we'd like to be consistent in this choice, which is important for e.g. tag_edges where
+/// conflicting cascade paths may lead to unexpected behavior.)
+pub fn delete_files_cascade(file_ids: &[Uuid], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
+{
+   delete_files_tags(file_ids, connection)?;
+   delete_failed_encodings(file_ids, connection)?;
+   delete_files_encodings(file_ids, connection)?;
+
+   let thumbnail_paths = get_thumbnail_filepaths_by_file_ids(file_ids, connection)?;
+   // remove thumbnails from disk
+   let app_data_path = app_handle.path_resolver().app_data_dir().ok_or(anyhow::anyhow!("Error getting app data path"))?;
+   for path in thumbnail_paths {
+      let thumbnail_path = app_data_path.join(path);
+      std::fs::remove_file(thumbnail_path)?;
+   }
+   delete_thumbnails_by_file_ids(file_ids, connection)?;
+
+   // All dependent tables should not reference the files anymore, so we can delete them.
+   delete_files(file_ids, connection)?;
+
+   Ok(())
+}
+
+pub fn delete_base_directory_cascade(base_dir_ids: &[Uuid], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
+{
+   let file_ids = get_files_in_directories(base_dir_ids, connection)?;
+   delete_files_cascade(&file_ids, connection, app_handle)?;
+   delete_base_directories(base_dir_ids, connection)?;
+
+   Ok(())
+}
+
+pub fn delete_files_encodings(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::image_features_vit_l_14_336_px;
 
-   diesel::delete(image_features_vit_l_14_336_px::table.filter(image_features_vit_l_14_336_px::id.eq(file_id.to_string())))
+   diesel::delete(image_features_vit_l_14_336_px::table.filter(image_features_vit_l_14_336_px::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
       .execute(connection)?;
 
    Ok(())
 }
 
-pub fn delete_failed_encoding(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_failed_encodings(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::failed_encodings;
 
-   diesel::delete(failed_encodings::table.filter(failed_encodings::id.eq(file_id.to_string())))
+   diesel::delete(failed_encodings::table.filter(failed_encodings::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
       .execute(connection)?;
 
    Ok(())
 }
 
-pub fn delete_file_tags(file_id: &Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_files_tags(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::file_tags;
 
-   diesel::delete(file_tags::table.filter(file_tags::file_id.eq(file_id.to_string())))
+   diesel::delete(file_tags::table.filter(file_tags::file_id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
       .execute(connection)?;
 
    Ok(())
@@ -864,9 +933,9 @@ mod tests
          .expect("Error inserting file");
 
       // Get the file path using the query we're actually testing
-      let file_path = get_filepath(file_id, &mut connection).unwrap().unwrap();
+      let file_path = &get_filepaths(&[file_id], &mut connection).unwrap()[0].1;
       let expected = PathBuf::from(base_directory).join(relative_path);
-      assert_eq!(file_path, expected);
+      assert_eq!(*file_path, expected);
    }
 
 }

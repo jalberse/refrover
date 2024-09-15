@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/api/dialog"
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { addWatchedDirectory, deleteWatchedDirectory } from "../api"
 import WatchedDirectoriesList from "./WatchedDirectoriesList"
 
 export type Directory = {
@@ -9,14 +10,14 @@ export type Directory = {
 }
 
 const WatchedDirectories: React.FC = () => {
+  // TODO We need to fetch the initial set of watched directories from the backend
   const [directories, setDirectories] = useState<Directory[]>([])
+  const prevDirectoriesRef = useRef<Directory[]>([])
 
   const generateUniqueId = () => {
     return Math.floor(Math.random() * 1000000)
   }
 
-  // TODO Actually tell backend to add it as a watched directory
-  //      Watch - do we need to sanitize? Or like, correct slashes and stuff?
   const addDirectory = async () => {
     const selectedPath = await open({
       directory: true,
@@ -40,14 +41,40 @@ const WatchedDirectories: React.FC = () => {
     }
   }
 
-  // TODO We probably want a confirmation dialog here?
-  // TODO Actually tell the backend to remove the directory
   const removeDirectory = (id: number) => {
     const newDirectories = directories.filter(
       (directory) => directory.id !== id,
     )
     setDirectories(newDirectories)
   }
+
+  useEffect(() => {
+    const prevDirectories = prevDirectoriesRef.current
+
+    const addedDirectories = directories.filter(
+      (dir) => !prevDirectories.some((prevDir) => prevDir.id === dir.id),
+    )
+
+    const removedDirectories = prevDirectories.filter(
+      (prevDir) => !directories.some((dir) => dir.id === prevDir.id),
+    )
+
+    // TODO Do we need to format the paths at all?
+    const addPromises = addedDirectories.map((dir) =>
+      addWatchedDirectory(dir.path),
+    )
+    const removePromises = removedDirectories.map((dir) =>
+      deleteWatchedDirectory(dir.path),
+    )
+
+    Promise.all([...addPromises, ...removePromises])
+      .then(() => {
+        prevDirectoriesRef.current = directories
+      })
+      .catch((error: unknown) => {
+        console.error("Error updating watched directories:", error)
+      })
+  }, [directories])
 
   return (
     <div>
