@@ -1,4 +1,3 @@
-import { addWatchedDirectory } from "@/api"
 import AssetDetails from "@/components/AssetDetails"
 import { Gallery } from "@/components/Gallery"
 import Search from "@/components/Search"
@@ -28,13 +27,6 @@ export const Home: React.FC = () => {
     (state) => state.detailsViewFileUuid,
   )
   const isDetailsViewOpen = detailsViewFileUuid !== ""
-
-  // Create a callback function that calls addWatchedDirectory with a hardcoded directory path
-  // We'll call this with a button click
-  // TODO delete this!!!!
-  const addDirTest = useCallback(() => {
-    void addWatchedDirectory("D:\\refrover_photos")
-  }, [])
 
   // TODO Limit the extent to which these panel groups can be resized.
   //      In the future maybe we want a more robust panel system,
@@ -69,9 +61,6 @@ export const Home: React.FC = () => {
           <Panel id="LeftPanel" order={0} defaultSize={25}>
             <div className="flex-1 overflow-auto px-4 h-full">
               <WatchedDirectories />
-              <button onClick={addDirTest} type="button">
-                Add Directory
-              </button>
             </div>
           </Panel>
           <PanelResizeHandle />

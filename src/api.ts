@@ -73,10 +73,10 @@ export async function fetchThumbnails(fileIds: FileUuid[]) {
   }
 }
 
-export async function addWatchedDirectory(directoryPath: string) {
+export async function addWatchedDirectory(directory: string) {
   try {
     await invoke("add_watched_directory", {
-      directoryPath,
+      directory,
     })
       .catch((error: unknown) => {
         console.error("Error adding watched directory:", error)
@@ -89,10 +89,10 @@ export async function addWatchedDirectory(directoryPath: string) {
   }
 }
 
-export async function deleteWatchedDirectory(directoryPath: string) {
+export async function deleteWatchedDirectory(directory: string) {
   try {
     await invoke("delete_watched_directory", {
-      directoryPath,
+      directory,
     })
       .catch((error: unknown) => {
         console.error("Error removing watched directory:", error)

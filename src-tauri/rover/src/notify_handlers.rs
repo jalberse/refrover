@@ -6,7 +6,7 @@ use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind,
 use tauri::Manager;
 use uuid::Uuid;
 
-use crate::{ann, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}};
+use crate::{ann, clip::Clip, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}};
 
 
 pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
@@ -276,24 +276,9 @@ impl FsEventHandler {
             file.0.clone()
         }).collect::<Vec<Uuid>>();
         
-        {
-            let clip_state = self.app_handle.state::<ClipState>();
-            let clip = &clip_state.0.lock().unwrap().clip;
-            clip.encode_image_files(&file_ids, &mut connection)?;
-        }
-
-        {
-            let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
-            
-            let image_features = queries::get_image_feature_data(&file_ids, &mut connection)?;
-            
-            let hnsw_elements = ann::convert_rows_to_hnsw_elements(&image_features)?;
-            
-            let search_state = self.app_handle.state::<SearchState>();
-            let mut search_inner = search_state.0.lock().unwrap();
-            let hnsw = &mut search_inner.hnsw;
-            hnsw.insert_slice(hnsw_elements);
-        }
+        let clip_state = self.app_handle.state::<ClipState>();
+        let search_state = self.app_handle.state::<SearchState>();
+        Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)?;
 
         // TODO Lower priority: Possibly generate thumbnails here.
         //      Low priority since generating them as-needed is fine for now.

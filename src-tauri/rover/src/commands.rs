@@ -1,17 +1,16 @@
 use anyhow::Context;
 use log::info;
-use notify_debouncer_full::notify::{RecursiveMode, Watcher};
-use tauri::api::file;
 use tauri::Manager;
 use uuid::Uuid;
 
+use crate::clip::Clip;
 use crate::models::NewFileOwned;
 use crate::notify_handlers::{FsEventHandler, FS_WATCHER_DEBOUNCER_DURATION};
-use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState};
-use crate::{db, junk_drawer, queries, thumbnails};
-use crate::{preprocessing, state::SearchState};
+use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState, SearchState};
+use crate::{ann, db, junk_drawer, queries, thumbnails};
+use crate::preprocessing;
 use imghdr;
-use crate::interface::{FileMetadata, FileUuid, ImageSize, Payload, Thumbnail, ThumbnailUuid};
+use crate::interface::{FileMetadata, FileUuid, ImageSize, Thumbnail, ThumbnailUuid};
 use anyhow_tauri::{IntoTAResult, TAResult};
 
 use rayon::prelude::*; // For par_iter
@@ -57,6 +56,7 @@ pub async fn search_images<'a>(
     let search_results = hnsw.search(query_vector_slice, number_neighbors, ef_arg, distance_threshold);
     let elapsed = now.elapsed();
     info!("Search took {:?} for {:?} neighbors with ef_ arg {:?} and distance threshold {:?}", elapsed, number_neighbors, ef_arg, distance_threshold);
+    info!("Found {:?} results", search_results.len());
 
     let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
 
@@ -187,6 +187,7 @@ pub async fn add_watched_directory(
     watcher_state: tauri::State<'_, FsWatcherState>,
     clip_state: tauri::State<'_, ClipState>,
     pool_state: tauri::State<'_, ConnectionPoolState>,
+    search_state: tauri::State<'_, SearchState<'_>>,
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
@@ -279,8 +280,7 @@ pub async fn add_watched_directory(
     let new_file_rows: Vec<NewFileOwned> = files.map(|x| -> anyhow::Result<NewFileOwned> {
         let file_uuid = Uuid::new_v4();
         let binding = x.path().clone();
-        let file_relative_path = binding.strip_prefix(directory_path).into_ta_result()?;
-        let file_path_str = file_relative_path.to_str().ok_or(anyhow::anyhow!("Unable to convert file path to string")).into_ta_result()?;        
+        let file_path_str = binding.to_str().ok_or(anyhow::anyhow!("Unable to convert path to string"))?;
         
         file_ids.push(file_uuid);
         
@@ -294,21 +294,10 @@ pub async fn add_watched_directory(
         
     queries::insert_files_rows(&new_file_rows, &mut connection).into_ta_result()?;
 
-    // TODO Alright we are *crashing* somewhere in here lol. Surprising. We do add the watched dir, that's fine. We add 112 files...
-    // So we're getting to ~here. Uh oh, a crash encoding files?
-    // Well, I do unwrap in encode_image_files(), so maybe my assumptions that unwrapping is find are wrong! First port of call.
-    //    We should then propogate any errors (unless ONNX is panicing for something? I would assume that ONNX would try to recover and you can't just brick your device...)    
-    // (note that the unwrap on the mutex *should* be fine, as that only panics if a blocking thread has panicked. In which case the issue is in the blocking thread.
-    //       AND we have no blocking threads unless I'm insane).
-
     // Encode images and store results in the DB.
     // Note this is relatively long-running; this command is async, so it will not block the main thread.
     // But it's a good idea to keep this as the last step in the command so other tables are updated quickly.
-    {
-        let clip_state = clip_state.0.lock().unwrap();
-        let clip = &clip_state.clip;
-        clip.encode_image_files(&file_ids, &mut connection)?;
-    }
+    Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)?;
 
     Ok(())
 }

@@ -7,14 +7,13 @@ use std::path::PathBuf;
 use diesel::dsl::{exists, select};
 use diesel::sql_types::Text;
 use diesel::prelude::*;
-use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SqliteConnection};
+use diesel::{ExpressionMethods, QueryDsl, SqliteConnection};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
 use crate::models::{ImageFeatureVitL14336Px, NewFileOwned, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
-use crate::schema::files::watched_directory_id;
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
 {

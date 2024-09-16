@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use diesel::{RunQueryDsl, SqliteConnection};
 use image::DynamicImage;
+use log::{info, warn};
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
 use ort::{self, inputs, CPUExecutionProvider, GraphOptimizationLevel};
 use ort::DirectMLExecutionProvider;
@@ -10,7 +11,8 @@ use uuid::Uuid;
 
 use crate::models::{NewFailedEncoding, NewImageFeaturesVitL14336Px};
 use crate::preprocessing::{self, FEATURE_VECTOR_LENGTH};
-use crate::queries;
+use crate::{ann, queries};
+use crate::state::{ClipState, SearchState};
 
 pub struct ForwardResults
 {
@@ -96,7 +98,14 @@ impl Clip
     pub fn encode_image(&self, images: Array<f32, Dim<[usize; 4]>>) -> anyhow::Result<Array2<f32>>
     {
         let images_len = images.len_of(Axis(0));
+        if images_len == 0 {
+            return Err(anyhow::anyhow!("No images to encode!"));
+        }
+        info!("Images len: {}", images_len);
+        info!("Running visual session...");
         let outputs = self.visual_session.run(inputs![images]?)?;
+        info!("Ran visual session");
+
 
         let output = &outputs["FEATURES_EMBEDDED"];
 
@@ -126,6 +135,9 @@ impl Clip
     /// Returns a 2D array of shape (batch_size, FEATURE_VECTOR_LENGTH).
     pub fn encode_text(&self, tokens: Array2<i32>) -> anyhow::Result<Array2<f32>>
     {
+        if tokens.len_of(Axis(0)) == 0 {
+            return Err(anyhow::anyhow!("No text to encode!"));
+        }
         let tokens_len = tokens.len_of(Axis(0));
         let outputs = self.text_session.run(inputs![tokens]?)?;
 
@@ -172,77 +184,124 @@ impl Clip
     /// Encodes the images with the given Uuids and paths and saves the feature vectors to the database.
     pub fn encode_image_files(&self, files: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
     {
-        // TODO I think we'll need to pre-validate images before sending to GPU?
-        //        Our "failed encodings" only covers files that fail to load as images,
-        //        but we just assume that any image we load is valid - but we're getting errors when we try to run inference.
-        //        We want to avoid that, especially since we'd throw away the whole batch of images.
-        //        I suppose if a batch fails, we can try to run them individually and log the failures.
-        //   TODO largely, We need to ensure we don't just *crash* on failure, though, which we currently are.
-        //        If we can just fail for individual images and log the error properly, that is a good first step.
         use crate::schema::image_features_vit_l_14_336_px;
         use crate::schema::failed_encodings;
         
         let files = queries::get_filepaths(files, connection)?;
 
+        info!("Encoding images with CLIP...");
+
         // Encode images with CLIP and add encodings to the database
         for chunk in files.chunks(32)
         {
+            info!("Images in chunk: \n {:?}", chunk);
             // Load and preprocess our images.
             let images = preprocessing::load_image_batch(&chunk);
              
+            info!("Loaded images");
+
             // Split images into those that succesfully loaded and those that failed.
             // Images may fail to load because they are not images, not found, etc.
             let (images, failed_images) = images.into_iter().partition::<Vec<_>, _>(|(_, img)| img.is_ok());
  
-            // Handle images that succesfully loaded.
-            // Unwrap the succesful images. This is safe because we just partitioned.
-            let images: Vec<(Uuid, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.unwrap())).collect();
-            let resized_images = preprocessing::resize_images(images);
-            let image_clip_input = preprocessing::image_to_clip_format(resized_images);
- 
-            // TODO We need to handle failures here. They seem to come up occasionally?
-            //      If we do get a failure, then to avoid just failing for the whole batch,
-            //      we could try for each individual image. Then individual failures can be put in the failed_encodings table.
-            //      Also, it just crashes right now - we'd rather log it properly and continue?
-            //      At least, it was crashing in our db::init() logic, but that might just be because our error
-            //        handling was set to crash on error and we weren't logging or something.
-            //        Hopefully there's not just a panic-type thing in ORT, I doubt it,
-            //        unless it's something odd with the GPU side?
-            let image_encodings: Array2<f32> = self.encode_image(image_clip_input)?;
- 
-            // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
-            let serialized_encodings: anyhow::Result<Vec<Vec<u8>>> = image_encodings.outer_iter().map(|row| {
-                Ok(bincode::serialize(&row.to_vec())?)
-            }).collect();
-            let serialized_encodings = serialized_encodings?;
- 
-            // Insert the image encodings into the image_features_vit_l_14_336_px table
-            // The encoding is serialized with serde.
-            // The ID of the encoding is the same as the file ID.
-            let new_image_features: Vec<NewImageFeaturesVitL14336Px> = chunk.iter().zip(serialized_encodings.iter()).map(|((file_id, _), encoding)| {
-                NewImageFeaturesVitL14336Px {
-                    id: file_id.to_string(),
-                    feature_vector: encoding
-                }
-            }).collect();
-             
-            diesel::insert_into(image_features_vit_l_14_336_px::table)
+            info!("Successfully loaded images: {}", images.len());
+            info!("Failed to load images: {}", failed_images.len());
+
+            if images.is_empty()
+            {
+                warn!("No images to encode! Either you're throwing me a lot of junk data or there's likely a bug!");
+            }
+            else
+            {
+                // Handle images that succesfully loaded.
+                // Unwrap the succesful images. This is safe because we just partitioned.
+                let images: Vec<(Uuid, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.expect("Couldn't unwrap image!"))).collect();
+                info!("Images to encode: {}", images.len());
+                info!("Resizing...");
+                let resized_images = preprocessing::resize_images(images);
+                info!("Resized images");
+                info!("Converting to clip format...");
+                let image_clip_input = preprocessing::image_to_clip_format(resized_images);
+                info!("Converted to clip format");
+                
+                // TODO We need to handle failures here. They seem to come up occasionally?
+                //      If we do get a failure, then to avoid just failing for the whole batch,
+                //      we could try for each individual image. Then individual failures can be put in the failed_encodings table.
+                //      Also, it just crashes right now - we'd rather log it properly and continue?
+                //      At least, it was crashing in our db::init() logic, but that might just be because our error
+                //        handling was set to crash on error and we weren't logging or something.
+                //        Hopefully there's not just a panic-type thing in ORT, I doubt it,
+                //        unless it's something odd with the GPU side?
+                info!("Encoding images...");
+                let image_encodings: Array2<f32> = self.encode_image(image_clip_input)?;
+                info!("Encoded images");
+                
+                // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
+                info!("Serializing encodings...");
+                let serialized_encodings: anyhow::Result<Vec<Vec<u8>>> = image_encodings.outer_iter().map(|row| {
+                    Ok(bincode::serialize(&row.to_vec())?)
+                }).collect();
+                let serialized_encodings = serialized_encodings?;
+                info!("Serialized encodings");
+                
+                // Insert the image encodings into the image_features_vit_l_14_336_px table
+                // The encoding is serialized with serde.
+                // The ID of the encoding is the same as the file ID.
+                let new_image_features: Vec<NewImageFeaturesVitL14336Px> = chunk.iter().zip(serialized_encodings.iter()).map(|((file_id, _), encoding)| {
+                    NewImageFeaturesVitL14336Px {
+                        id: file_id.to_string(),
+                        feature_vector: encoding
+                    }
+                }).collect();
+                
+                diesel::insert_into(image_features_vit_l_14_336_px::table)
                 .values(&new_image_features)
                 .execute(connection)?;
+            }
  
-            // Convert the failed images into NewFailedEncoding structs and insert them into the failed_encodings table.
-            // The unwrap is safe because we just partitioned, so these are all Err results.
-            let new_failed_encodings: Vec<NewFailedEncoding> = failed_images.into_iter().map(|(uuid, img)| {
-                NewFailedEncoding {
-                    id: uuid.to_string(),
-                    error: img.as_ref().err().unwrap().to_string(),
-                    failed_at: None
-                }
-            }).collect();
- 
-            diesel::insert_into(failed_encodings::table)
+            if !failed_images.is_empty()
+            {
+                // Convert the failed images into NewFailedEncoding structs and insert them into the failed_encodings table.
+                // The unwrap is safe because we just partitioned, so these are all Err results.
+                let new_failed_encodings: Vec<NewFailedEncoding> = failed_images.into_iter().map(|(uuid, img)| {
+                    NewFailedEncoding {
+                        id: uuid.to_string(),
+                        error: img.as_ref().err().expect("Expected error!").to_string(),
+                        failed_at: None
+                    }
+                }).collect();
+                
+                diesel::insert_into(failed_encodings::table)
                 .values(&new_failed_encodings)
                 .execute(connection)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn encode_files_and_add_to_search(
+        file_ids: &[Uuid],
+        connection: &mut SqliteConnection,
+        clip_state: tauri::State<'_, ClipState>,
+        search_state: tauri::State<'_, SearchState<'_>>
+    ) -> anyhow::Result<()>
+    {
+        // Note that we pass in the clip_state rather than using &self here
+        // so that we can quickly release the lock on the app's CLIP state after
+        // encoding the images.
+        {
+            let clip = &clip_state.0.lock().unwrap().clip;
+            clip.encode_image_files(file_ids, connection)?;
+        }
+
+        // Add the resulting encodings to the HNSW search index.
+        let image_features = queries::get_image_feature_data(file_ids, connection)?; 
+        {
+            let hnsw_elements = ann::convert_rows_to_hnsw_elements(&image_features)?;
+            let mut search_inner = search_state.0.lock().unwrap();
+            let hnsw = &mut search_inner.hnsw;
+            hnsw.insert_slice(hnsw_elements);
         }
 
         Ok(())
