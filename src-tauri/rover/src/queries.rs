@@ -13,9 +13,11 @@ use tauri::AppHandle;
 use uuid::Uuid;
 use diesel::sql_types::Integer;
 
-use crate::models::{ImageFeatureVitL14336Px, NewFileOwned, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::error::Error;
+use crate::models::{ImageFeatureVitL14336Px, NewFile, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::uuid::UUID;
 
-pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
+pub fn add_tag_edge(start_vertex_id: UUID, end_vertex_id: UUID, source: UUID, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
 {
    // See https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
    use crate::schema::tag_edges;
@@ -63,15 +65,15 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       //    WHERE Id = @Id
    
       // The ID of the new direct edge. Other edges will be generated from this.
-      let new_edge_id = Uuid::new_v4();
+      let new_edge_id = Uuid::new_v4().into();
    
       let new_edge = NewTagEdge {
-         id: &new_edge_id.to_string(),
-         entry_edge_id: &new_edge_id.to_string(),
-         direct_edge_id: &new_edge_id.to_string(),
-         exit_edge_id: &new_edge_id.to_string(),
-         start_vertex_id: &start_vertex_id.to_string(),
-         end_vertex_id: &end_vertex_id.to_string(),
+         id: new_edge_id,
+         entry_edge_id: new_edge_id,
+         direct_edge_id: new_edge_id,
+         exit_edge_id: new_edge_id,
+         start_vertex_id: start_vertex_id,
+         end_vertex_id: end_vertex_id,
          hops: 0,
          source_id: source
       };
@@ -116,14 +118,14 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
       // For each row in a_incoming_edges_to_b, insert it into the table, generating a unique UUID for each row.
       for (entry_edge_id, direct_edge_id, exit_edge_id, start_vertex_id, end_vertex_id, hops, source) in a_incoming_edges_to_b {
          let new_edge = NewTagEdge {
-            id: &Uuid::new_v4().to_string(),
-            entry_edge_id: &entry_edge_id,
-            direct_edge_id: &direct_edge_id,
-            exit_edge_id: &exit_edge_id,
-            start_vertex_id: &start_vertex_id,
-            end_vertex_id: &end_vertex_id,
+            id: Uuid::new_v4().into(),
+            entry_edge_id: entry_edge_id.into(),
+            direct_edge_id: direct_edge_id.into(),
+            exit_edge_id: exit_edge_id.into(),
+            start_vertex_id: start_vertex_id.into(),
+            end_vertex_id: end_vertex_id.into(),
             hops: hops,
-            source_id: &source
+            source_id: source.into()
          };
    
          diesel::insert_into(tag_edges::table)
@@ -167,14 +169,14 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
    
       for (entry_edge_id, direct_edge_id, exit_edge_id, start_vertex_id, end_vertex_id, hops, source) in b_outgoing_edges {
          let new_edge = NewTagEdge {
-            id: &Uuid::new_v4().to_string(),
-            entry_edge_id: &entry_edge_id,
-            direct_edge_id: &direct_edge_id,
-            exit_edge_id: &exit_edge_id,
-            start_vertex_id: &start_vertex_id,
-            end_vertex_id: &end_vertex_id,
+            id: Uuid::new_v4().into(),
+            entry_edge_id: entry_edge_id.into(),
+            direct_edge_id: direct_edge_id.into(),
+            exit_edge_id: exit_edge_id.into(),
+            start_vertex_id: start_vertex_id.into(),
+            end_vertex_id: end_vertex_id.into(),
             hops: hops,
-            source_id: &source
+            source_id: source.into()
          };
    
          diesel::insert_into(tag_edges::table)
@@ -243,14 +245,14 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
    
       for tmp_edge in &tmp_edges {
          let new_edge = NewTagEdge {
-            id: &Uuid::new_v4().to_string(), // Generate a new UUID for each row
-            entry_edge_id: &tmp_edge.entry_edge_id,
-            direct_edge_id: &new_edge_id.to_string(),
-            exit_edge_id: &tmp_edge.exit_edge_id,
-            start_vertex_id: &tmp_edge.start_vertex_id,
-            end_vertex_id: &tmp_edge.end_vertex_id,
+            id: Uuid::new_v4().into(), // Generate a new UUID for each row
+            entry_edge_id: tmp_edge.entry_edge_id.clone().into(),
+            direct_edge_id: new_edge_id.clone().into(),
+            exit_edge_id: tmp_edge.exit_edge_id.clone().into(),
+            start_vertex_id: tmp_edge.start_vertex_id.clone().into(),
+            end_vertex_id: tmp_edge.end_vertex_id.clone().into(),
             hops: tmp_edge.hops,
-            source_id: &source
+            source_id: source.into()
          };
          
          diesel::insert_into(tag_edges::table)
@@ -269,7 +271,7 @@ pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, co
 
 /// Deletes the given tag edge from the database.
 /// The edge must be a direct edge (hops = 0).
-pub fn delete_tag_edge(id: Uuid, connection: &mut SqliteConnection) -> diesel::QueryResult<()> {
+pub fn delete_tag_edge(id: UUID, connection: &mut SqliteConnection) -> diesel::QueryResult<()> {
    let result = connection.transaction(|connection| {
       diesel::sql_query("SELECT id FROM tag_edges WHERE id = ? AND hops = 0")
          .bind::<Text, _>(id.to_string())
@@ -327,10 +329,10 @@ pub fn delete_tag_edge(id: Uuid, connection: &mut SqliteConnection) -> diesel::Q
 
 /// Get the direct edge ID given a start and end vertex ID and source ID.
 /// If the edge does not exist, returns None, including if there is an indirect edge.
-pub fn get_edge_id(start_vertex_id: Uuid, end_vertex_id: Uuid, source_id: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>> {
+pub fn get_edge_id(start_vertex_id: UUID, end_vertex_id: UUID, source_id: UUID, connection: &mut SqliteConnection) -> anyhow::Result<Option<UUID>> {
    use crate::schema::tag_edges;
 
-   let edge_id: Option<String> = tag_edges::table
+   let edge_id: Option<UUID> = tag_edges::table
       .select(tag_edges::id)
       .filter(tag_edges::start_vertex_id.eq(start_vertex_id.to_string()))
       .filter(tag_edges::end_vertex_id.eq(end_vertex_id.to_string()))
@@ -341,7 +343,7 @@ pub fn get_edge_id(start_vertex_id: Uuid, end_vertex_id: Uuid, source_id: &str, 
 
    match edge_id
    {
-    Some(edge_id) => Ok(Some(Uuid::parse_str(&edge_id)?)),
+    Some(edge_id) => Ok(Some(edge_id)),
     None => Ok(None),
    }
 }
@@ -398,17 +400,17 @@ pub fn get_tag_trees(connection: &mut SqliteConnection) -> anyhow::Result<String
 
    // Get all tags with no parents; i.e. all tag IDs which are not present in the end_vertex_id column of tag_edges.
    // These are the root nodes of the trees.
-   let root_tag_ids = tags::table
+   let root_tag_ids: Vec<UUID> = tags::table
       .select(tags::id)
       .filter(tags::id.ne_all(tag_edges::table.select(tag_edges::end_vertex_id)))
-      .load::<String>(connection)?;
+      .load::<UUID>(connection)?;
 
    let mut trees = Vec::<TagTreeNode>::new();
 
    for root_tag_id in root_tag_ids {
-      let root_tree = get_tag_tree(Uuid::parse_str(&root_tag_id)?, connection)?;
+      let root_tree = get_tag_tree(root_tag_id, connection)?;
       trees.push(TagTreeNode {
-         name: get_tag_name(Uuid::parse_str(&root_tag_id)?, connection)?,
+         name: get_tag_name(root_tag_id, connection)?,
          children: root_tree
       });
    }
@@ -417,21 +419,21 @@ pub fn get_tag_trees(connection: &mut SqliteConnection) -> anyhow::Result<String
    Ok(serde_json::to_string(&trees)?)
 }
 
-fn get_tag_tree(tag_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<Option<Vec<TagTreeNode>>>
+fn get_tag_tree(tag_id: UUID, connection: &mut SqliteConnection) -> anyhow::Result<Option<Vec<TagTreeNode>>>
 {
    use crate::schema::tag_edges;
 
    // Get all children of the tag ID
-   let children = tag_edges::table
+   let children: Vec<UUID> = tag_edges::table
       .select(tag_edges::end_vertex_id)
-      .filter(tag_edges::start_vertex_id.eq(tag_id.to_string()))
+      .filter(tag_edges::start_vertex_id.eq(tag_id))
       .filter(tag_edges::hops.eq(0))
-      .load::<String>(connection)?;
+      .load::<UUID>(connection)?;
 
    let mut out = Vec::<TagTreeNode>::new();
    for child in children {
-      let child_name = get_tag_name(Uuid::parse_str(&child)?, connection)?;
-      let child_tree = get_tag_tree(Uuid::parse_str(&child)?, connection)?;
+      let child_name = get_tag_name(child, connection)?;
+      let child_tree = get_tag_tree(child, connection)?;
       out.push(TagTreeNode {
          name: child_name,
          children: child_tree
@@ -443,13 +445,13 @@ fn get_tag_tree(tag_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Resu
    Ok(Some(out))
 }
 
-pub fn get_tag_name(tag_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<String>
+pub fn get_tag_name(tag_id: UUID, connection: &mut SqliteConnection) -> anyhow::Result<String>
 {
    use crate::schema::tags;
 
    let result = tags::table
       .select(tags::name)
-      .filter(tags::id.eq(tag_id.to_string()))
+      .filter(tags::id.eq(tag_id))
       .first(connection)?;
 
    Ok(result)
@@ -466,7 +468,7 @@ pub fn get_all_image_feature_data(connection: &mut SqliteConnection) -> anyhow::
    Ok(image_feature_data)
 }
 
-pub fn get_image_feature_data(ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<ImageFeatureVitL14336Px>>
+pub fn get_image_feature_data(ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<Vec<ImageFeatureVitL14336Px>>
 {
    use crate::schema::image_features_vit_l_14_336_px::dsl::*;
 
@@ -491,105 +493,102 @@ pub fn insert_thumbnail(thumbnail: &NewThumbnail, connection: &mut SqliteConnect
 
 /// Gets the thumbnail data for the given file ID.
 /// Returns NONE if the thumbnail does not exist in the table for the file ID.
-pub fn get_thumbnail_by_file_id(file_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<Option<Thumbnail>>
+pub fn get_thumbnail_by_file_id(file_id: UUID, connection: &mut SqliteConnection) -> anyhow::Result<Option<Thumbnail>>
 {
    use crate::schema::thumbnails;
 
    let thumbnail = thumbnails::table
       .select(Thumbnail::as_select())
-      .filter(thumbnails::file_id.eq(file_id.to_string()))
+      .filter(thumbnails::file_id.eq(file_id))
       .first(connection)
       .optional()?;
 
    Ok(thumbnail)
 }
 
-pub fn delete_thumbnail_by_id(thumbnail_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_thumbnail_by_id(thumbnail_id: UUID, connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::thumbnails;
 
-   diesel::delete(thumbnails::table.filter(thumbnails::id.eq(thumbnail_id.to_string())))
+   diesel::delete(thumbnails::table.filter(thumbnails::id.eq(thumbnail_id)))
       .execute(connection)?;
 
    Ok(())
 }
 
-pub fn delete_thumbnails_by_file_ids(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_thumbnails_by_file_ids(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::thumbnails;
 
-   diesel::delete(thumbnails::table.filter(thumbnails::file_id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
+   diesel::delete(thumbnails::table.filter(thumbnails::file_id.eq_any(file_ids)))
       .execute(connection)?;
 
    Ok(())
 }
 
-pub fn get_thumbnail_filepaths_by_file_ids(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<String>>
+pub fn get_thumbnail_filepaths_by_file_ids(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<Vec<String>>
 {
    use crate::schema::thumbnails;
-
-   let ids_strings = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
 
    let paths: Vec<String> = thumbnails::table
       .select(thumbnails::path)
-      .filter(thumbnails::file_id.eq_any(ids_strings))
+      .filter(thumbnails::file_id.eq_any(file_ids))
       .load(connection)?;
 
    Ok(paths)
 }
 
-pub fn get_filepaths(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
+pub fn get_filepaths(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<Vec<(UUID, PathBuf)>>
 {
    use crate::schema::files;
 
    let ids_strings = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
 
-   let filepaths: Vec<(String, String)> = files::table
+   let filepaths: Vec<(UUID, String)> = files::table
       .select((files::id, files::filepath))
       .filter(files::id.eq_any(ids_strings))
       .load(connection)?;
 
-   let out = filepaths.into_iter().map(|(id, filepath)| (Uuid::parse_str(&id).unwrap(), PathBuf::from(filepath))).collect();
+   let out = filepaths.into_iter().map(|(id, filepath)| (id, PathBuf::from(filepath))).collect();
 
    Ok(out)
 }
 
-pub fn get_files_in_watched_directories(watched_dir_uuids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<Uuid>>
+pub fn get_files_in_watched_directories(watched_dir_uuids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<Vec<UUID>>
 {
    use crate::schema::files;
 
    let watched_dir_uuids = watched_dir_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
 
-   let file_ids: Vec<String> = files::table
+   let file_ids: Vec<UUID> = files::table
       .select(files::id)
       .filter(files::watched_directory_id.eq_any(watched_dir_uuids))
       .load(connection)?;
 
-   let file_ids = file_ids.into_iter().map(|file_id| Uuid::parse_str(&file_id).unwrap()).collect();
    Ok(file_ids)
 }
 
-pub fn get_file_id_from_filepath(filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
+pub fn get_file_id_from_filepath(filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<UUID>>
 {
    use crate::schema::files;
 
-   let file_id: Option<String> = files::table
+   let file_id: Option<UUID> = files::table
       .select(files::id)
       .filter(files::filepath.eq(filepath))
       .first(connection)
       .optional()?;
 
    match file_id {
-      Some(file_id) => Ok(Some(Uuid::parse_str(&file_id)?)),
+      Some(file_id) => Ok(Some(file_id)),
       None => Ok(None)
    }
 }
 
-pub fn update_filepath(file_id: &Uuid, new_filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn update_filepath(file_id: &UUID, new_filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::files;
 
-   diesel::update(files::table.filter(files::id.eq(file_id.to_string())))
+   diesel::update(files::table.filter(files::id.eq(file_id)))
       .set(files::filepath.eq(new_filepath))
       .execute(connection)?;
 
@@ -598,25 +597,36 @@ pub fn update_filepath(file_id: &Uuid, new_filepath: &str, connection: &mut Sqli
 
 // Inserts the given files into the database, updating the base_directory and files tables.
 // Returns the UUIDs of the inserted files.
-pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection, watched_dir_uuid: &Option<Uuid>) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
+pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection, watched_dir_uuid: Option<UUID>) -> anyhow::Result<Vec<(UUID, PathBuf)>>
 {
    use crate::schema::files;
 
-   let watched_directory_id_str = watched_dir_uuid.as_ref().map(|uuid| uuid.to_string());
-
    // TODO Consider using RETURNING clause instead to get the UUIDs/paths of inserted rows.
    let files = files.iter().map(|file| {
-      let file_id = Uuid::new_v4();
-      let new_file = NewFileOwned {
-         id: file_id.to_string(),
-         // TODO use paths-as-strings crate instead.
-         filepath: file.to_string_lossy().to_string(),
-         watched_directory_id: watched_directory_id_str.clone(),
+      let file_id = Uuid::new_v4().into();
+      let filepath = file.to_str().map(|s| s.to_string()).ok_or(Error::PathBufToString)?;
+      let new_file = NewFile {
+         id: file_id,
+         // TODO use paths-as-strings crate instead, possibly?
+         filepath,
+         watched_directory_id: watched_dir_uuid,
       };
-      (file_id, file.clone(), new_file)
-   }).collect::<Vec<(Uuid, PathBuf, NewFileOwned)>>();
+      Ok((file_id, file.clone(), new_file))
+   }).collect::<Vec<anyhow::Result<(UUID, PathBuf, NewFile)>>>();
 
-   let rows = files.iter().map(|(_, _, new_file)| new_file).collect::<Vec<&NewFileOwned>>();
+   // Filter out any errors, logging them
+   // TODO How should we handle this better?
+   let files = files.into_iter().filter_map(|result| {
+      match result {
+         Ok(file) => Some(file),
+         Err(e) => {
+            log::error!("Error converting PathBuf to String. Path is likely not valid UTF-8: {:?}", e);
+            None
+         }
+      }
+   }).collect::<Vec<(UUID, PathBuf, NewFile)>>();
+
+   let rows = files.iter().map(|(_, _, new_file)| new_file).collect::<Vec<&NewFile>>();
 
    diesel::insert_into(files::table)
       .values(rows)
@@ -626,7 +636,7 @@ pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection, watche
 }
 
 // In the case where we know the base directory ID, we can insert files directly.
-pub fn insert_files_rows(files_rows: &[NewFileOwned], connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn insert_files_rows(files_rows: &[NewFile], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::files;
 
@@ -638,13 +648,13 @@ pub fn insert_files_rows(files_rows: &[NewFileOwned], connection: &mut SqliteCon
 }
 
 /// Returns the UUID of the new watched directory.
-pub fn insert_watched_directory(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<Uuid>
+pub fn insert_watched_directory(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<UUID>
 {
    use crate::schema::watched_directories;
 
-   let watched_directory_uuid = Uuid::new_v4();
+   let watched_directory_uuid = Uuid::new_v4().into();
    let new_watched_directory = crate::models::NewWatchedDirectory {
-      id: &watched_directory_uuid.to_string(),
+      id: watched_directory_uuid,
       filepath: watched_directory,
    };
 
@@ -668,41 +678,38 @@ pub fn watched_dir_exists(watched_directory: &str, connection: &mut SqliteConnec
    Ok(exists)
 }
 
-pub fn get_watched_directory_from_path(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
+pub fn get_watched_directory_from_path(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<UUID>>
 {
    use crate::schema::watched_directories;
 
-   let uuid: Option<String> = watched_directories::table
+   let uuid: Option<UUID> = watched_directories::table
       .select(watched_directories::id)
       .filter(watched_directories::filepath.eq(watched_directory))
       .first(connection)
       .optional()?;
 
    match uuid {
-      Some(uuid) => Ok(Some(Uuid::parse_str(&uuid)?)),
+      Some(uuid) => Ok(Some(uuid)),
       None => Ok(None)
    }
 }
 
-fn delete_watched_directories(watched_directories_uuids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+fn delete_watched_directories(watched_directories_uuids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::watched_directories;
 
-   let watched_directory_ids_str = watched_directories_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
-
-   diesel::delete(watched_directories::table.filter(watched_directories::id.eq_any(watched_directory_ids_str)))
+   // TODO This and in other fns, we don't need to convert to String anymore. UUIDs, yay.
+   diesel::delete(watched_directories::table.filter(watched_directories::id.eq_any(watched_directories_uuids)))
       .execute(connection)?;
 
    Ok(())
 }
 
-fn delete_files(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+fn delete_files(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::files;
 
-   let id_strs = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
-
-   diesel::delete(files::table.filter(files::id.eq_any(id_strs)))
+   diesel::delete(files::table.filter(files::id.eq_any(file_ids)))
       .execute(connection)?;
 
    Ok(())
@@ -715,7 +722,7 @@ fn delete_files(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow:
 /// do so with ON DELETE CASCADE enabled). It's a choice to be more explicit in calling code.
 /// (And we'd like to be consistent in this choice, which is important for e.g. tag_edges where
 /// conflicting cascade paths may lead to unexpected behavior.)
-pub fn delete_files_cascade(file_ids: &[Uuid], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
+pub fn delete_files_cascade(file_ids: &[UUID], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
 {
    delete_files_tags(file_ids, connection)?;
    delete_failed_encodings(file_ids, connection)?;
@@ -736,7 +743,7 @@ pub fn delete_files_cascade(file_ids: &[Uuid], connection: &mut SqliteConnection
    Ok(())
 }
 
-pub fn delete_watched_directories_cascade(base_dir_ids: &[Uuid], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
+pub fn delete_watched_directories_cascade(base_dir_ids: &[UUID], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
 {
    // Note that since these IDs include those files in subdirectories, so we don't need to walk a tree.
    let file_ids = get_files_in_watched_directories(base_dir_ids, connection)?;
@@ -746,7 +753,7 @@ pub fn delete_watched_directories_cascade(base_dir_ids: &[Uuid], connection: &mu
    Ok(())
 }
 
-pub fn delete_files_encodings(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_files_encodings(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::image_features_vit_l_14_336_px;
 
@@ -756,7 +763,7 @@ pub fn delete_files_encodings(file_ids: &[Uuid], connection: &mut SqliteConnecti
    Ok(())
 }
 
-pub fn delete_failed_encodings(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_failed_encodings(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::failed_encodings;
 
@@ -766,7 +773,7 @@ pub fn delete_failed_encodings(file_ids: &[Uuid], connection: &mut SqliteConnect
    Ok(())
 }
 
-pub fn delete_files_tags(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn delete_files_tags(file_ids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::file_tags;
 

@@ -1,16 +1,16 @@
-use anyhow::Context;
 use log::info;
 use tauri::Manager;
 use uuid::Uuid;
 
 use crate::clip::Clip;
-use crate::models::NewFileOwned;
+use crate::models::NewFile;
 use crate::notify_handlers::{FsEventHandler, FS_WATCHER_DEBOUNCER_DURATION};
 use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState, SearchState};
-use crate::{ann, db, junk_drawer, queries, thumbnails};
+use crate::uuid::UUID;
+use crate::{db, junk_drawer, queries, thumbnails};
 use crate::preprocessing;
 use imghdr;
-use crate::interface::{FileMetadata, FileUuid, ImageSize, Thumbnail, ThumbnailUuid};
+use crate::interface::{FileMetadata, ImageSize, Thumbnail};
 use anyhow_tauri::{IntoTAResult, TAResult};
 
 use rayon::prelude::*; // For par_iter
@@ -29,7 +29,7 @@ pub async fn search_images<'a>(
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
         tokenizer_state: tauri::State<'_, ClipTokenizerState>,
-    ) -> TAResult<Vec<FileUuid>>
+    ) -> TAResult<Vec<UUID>>
 {
     if query_string.is_empty() {
         return Ok(vec![]);
@@ -58,7 +58,7 @@ pub async fn search_images<'a>(
     info!("Search took {:?} for {:?} neighbors with ef_ arg {:?} and distance threshold {:?}", elapsed, number_neighbors, ef_arg, distance_threshold);
     info!("Found {:?} results", search_results.len());
 
-    let search_results_uuids: Vec<FileUuid> = search_results.iter().map(|x| FileUuid(x.0.to_string())).collect();
+    let search_results_uuids: Vec<UUID> = search_results.iter().map(|x| x.0).collect();
 
     Ok(search_results_uuids)
 }
@@ -74,22 +74,23 @@ pub async fn search_images<'a>(
 /// For this reason, use the file UUIDs in the Thumbnail objects, not the original set, when handling the results.
 #[tauri::command]
 pub async fn fetch_thumbnails(
-        file_ids: Vec<FileUuid>,
+        file_ids: Vec<UUID>,
         app_handle: tauri::AppHandle,
         pool_state: tauri::State<'_, ConnectionPoolState>
     ) -> TAResult<Vec<Thumbnail>>
 {
+    // TODO Actually, Commands just need to be serializable. We could use UUID instead of the FileUuid wrapper, I think?
     let results: Vec<Thumbnail> = file_ids.par_iter().map(
             |file_id| {
                 let (thumbnail_uuid, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
-                    Uuid::parse_str(&file_id.0).context("Unable to parse file ID")?,
+                    *file_id,
                     &app_handle,
                     &pool_state
                 )?;
                 Ok(Thumbnail
                 {
-                    uuid: ThumbnailUuid(thumbnail_uuid.to_string()),
-                    file_uuid: FileUuid(file_id.0.to_string()),
+                    uuid: thumbnail_uuid,
+                    file_uuid: *file_id,
                     path: thumbnail_filepath,
                 })
             }
@@ -109,15 +110,14 @@ pub async fn fetch_thumbnails(
 /// will not return an error, since other metadata may still be available and useful.
 #[tauri::command]
 pub async fn fetch_metadata(
-    file_id: String,
+    file_id: UUID,
     app_handle: tauri::AppHandle,
     pool_state: tauri::State<'_, ConnectionPoolState>
 ) -> TAResult<FileMetadata>
 {
-    let uuid = Uuid::parse_str(&file_id).into_ta_result()?;
     let mut connection = db::get_db_connection(&pool_state)?;
 
-    let filepath = queries::get_filepaths(&[uuid], &mut connection)?;
+    let filepath = queries::get_filepaths(&[file_id], &mut connection)?;
     if filepath.is_empty() {
         return Err(anyhow::anyhow!("File not found for file_id: {}", file_id).into());
     }
@@ -125,7 +125,7 @@ pub async fn fetch_metadata(
     
     // Get the thumbnail filepath - the thumbnail should typically exist by this point, but we ensure it here.
     let (_, thumbnail_filepath) = thumbnails::ensure_thumbnail_exists(
-        Uuid::parse_str(&file_id).into_ta_result()?,
+        file_id,
         &app_handle,
         &pool_state
     )?;
@@ -276,21 +276,21 @@ pub async fn add_watched_directory(
     // Filter to only files. We will ignore any path that is not a file (directories, symlinks, etc.)
     let files = files.filter_map(|x| x.ok()).filter(|x| x.file_type().into_ta_result().ok().map(|y| y.is_file()).unwrap_or(false));
     
-    let mut file_ids = Vec::with_capacity(files.size_hint().0);
-    let new_file_rows: Vec<NewFileOwned> = files.map(|x| -> anyhow::Result<NewFileOwned> {
-        let file_uuid = Uuid::new_v4();
+    let mut file_ids: Vec<UUID> = Vec::with_capacity(files.size_hint().0);
+    let new_file_rows: Vec<NewFile> = files.map(|x| -> anyhow::Result<NewFile> {
+        let file_uuid = Uuid::new_v4().into();
         let binding = x.path().clone();
         let file_path_str = binding.to_str().ok_or(anyhow::anyhow!("Unable to convert path to string"))?;
         
         file_ids.push(file_uuid);
         
-        Ok(NewFileOwned
+        Ok(NewFile
             {
-                id: file_uuid.to_string(),
+                id: file_uuid.into(),
                 filepath: file_path_str.to_string(),
-                watched_directory_id: Some(watched_dir_uuid.to_string()),
+                watched_directory_id: Some(watched_dir_uuid.into()),
             })
-        }).collect::<Result<Vec<NewFileOwned>, anyhow::Error>>()?;
+        }).collect::<Result<Vec<NewFile>, anyhow::Error>>()?;
         
     queries::insert_files_rows(&new_file_rows, &mut connection).into_ta_result()?;
 
@@ -317,12 +317,8 @@ pub async fn delete_watched_directory(
 
     let directory_path = std::path::Path::new(&directory);
 
-    // TODO Rework this delete to handle the new vec of watchers.
-    //      Maybe we should store a map instead so we can quickly get it from the path.
-
     {
         let watchers = &mut watcher_state.0.lock().unwrap();
-        // Remove this directory from the watchers map.
         watchers.watchers.remove(&directory);
     }
 

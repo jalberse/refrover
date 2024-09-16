@@ -12,12 +12,10 @@ use anyhow::{Context, Ok};
 
 use diesel::{query_dsl::methods::SelectDsl, RunQueryDsl, SelectableHelper};
 use hnsw_rs::{hnsw::Hnsw, prelude::DistCosine};
-use log::info;
 use rustc_hash::FxHashMap;
 use tauri::{App, Manager};
-use uuid::Uuid;
 
-use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{ConnectionPoolState, SearchState}};
+use crate::{db, models::ImageFeatureVitL14336Px, schema::image_features_vit_l_14_336_px, state::{ConnectionPoolState, SearchState}, uuid::UUID};
 
 // The maximum number of links from one point to others.
 // Values from 16 to 64 are standard, with higher being more time consuming.
@@ -33,7 +31,7 @@ pub const DEFAULT_MAX_ELEMS: usize = 10000;
 #[derive(Debug, Clone)]
 pub struct HnswElement {
     pub feature_vector: Vec<f32>,
-    pub id: Uuid,
+    pub id: UUID,
 }
 
 /// Note that HNSW does not support removing points.
@@ -49,7 +47,7 @@ pub struct HnswSearch<'a> {
     /// While usize may not be large enough to map 1:1 with UUIDs, we functionally
     /// should never have this issue. We use UUIDs to maintain uniqueness across DBs
     /// in case we want to merge them, but usize is fine for this purpose.
-    hnsw_id_to_file_id_map: FxHashMap<usize, Uuid>,
+    hnsw_id_to_file_id_map: FxHashMap<usize, UUID>,
     current_id: usize,
 }
 
@@ -117,15 +115,15 @@ impl<'a> HnswSearch<'a>
     /// Range of cosine distance is from 0 to 2, 0 — identical vectors, 1 — no correlation, 2 — absolutely different.
     /// In practice, due to high-dimensional feature vectors, ~0.79 will be very semantically similar,
     /// and ~0.85 will be very semantically different (this is a rough estimate, check for a given dataset).
-    pub fn search(&self, query: &[f32], knbn: usize, ef_arg: usize, distance_threshold: f32) -> Vec<(Uuid, f32)>
+    pub fn search(&self, query: &[f32], knbn: usize, ef_arg: usize, distance_threshold: f32) -> Vec<(UUID, f32)>
     {
         let knn_neighbours = self.hnsw.search(query, knbn, ef_arg);
         // Map the IDs to the UUIDs. Neighbor.d_id (short for data_id) corresponds to the usize ID.
 
         // TODO Filter these results based on some constant, tweak it.
-        let results: Vec<(Uuid, f32)> = knn_neighbours
+        let results: Vec<(UUID, f32)> = knn_neighbours
             .iter()
-            .map(|n| -> (Uuid, f32)
+            .map(|n| -> (UUID, f32)
             {
                 (self.hnsw_id_to_file_id_map[&n.d_id], n.distance)
             })
@@ -165,6 +163,6 @@ pub fn convert_rows_to_hnsw_elements(rows: &[ImageFeatureVitL14336Px]) -> anyhow
         |x| Ok(HnswElement 
         {
             feature_vector: bincode::deserialize(&x.feature_vector[..])?,
-            id: Uuid::parse_str(&x.id)?,
+            id: x.id,
         })).collect::<anyhow::Result<Vec<HnswElement>>>()?)
 }

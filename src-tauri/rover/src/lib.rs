@@ -12,3 +12,4 @@ mod thumbnails;
 mod junk_drawer;
 pub mod interface;
 pub mod notify_handlers;
+mod uuid;

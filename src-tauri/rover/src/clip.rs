@@ -1,16 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use diesel::{RunQueryDsl, SqliteConnection};
 use image::DynamicImage;
-use log::{info, warn};
+use log::{info, trace, warn};
 use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
 use ort::{self, inputs, CPUExecutionProvider, GraphOptimizationLevel};
 use ort::DirectMLExecutionProvider;
 use anyhow;
-use uuid::Uuid;
 
 use crate::models::{NewFailedEncoding, NewImageFeaturesVitL14336Px};
 use crate::preprocessing::{self, FEATURE_VECTOR_LENGTH};
+use crate::uuid::UUID;
 use crate::{ann, queries};
 use crate::state::{ClipState, SearchState};
 
@@ -182,7 +182,7 @@ impl Clip
 
     // TODO This is awkward to call, we do weird maps. Just take the UUID and query for the path.
     /// Encodes the images with the given Uuids and paths and saves the feature vectors to the database.
-    pub fn encode_image_files(&self, files: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+    pub fn encode_image_files(&self, files: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
     {
         use crate::schema::image_features_vit_l_14_336_px;
         use crate::schema::failed_encodings;
@@ -215,14 +215,13 @@ impl Clip
             {
                 // Handle images that succesfully loaded.
                 // Unwrap the succesful images. This is safe because we just partitioned.
-                let images: Vec<(Uuid, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.expect("Couldn't unwrap image!"))).collect();
-                info!("Images to encode: {}", images.len());
-                info!("Resizing...");
+                let images: Vec<(UUID, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.expect("Couldn't unwrap image!"))).collect();
+                trace!("Resizing...");
                 let resized_images = preprocessing::resize_images(images);
-                info!("Resized images");
-                info!("Converting to clip format...");
+                trace!("Resized images");
+                trace!("Converting to clip format...");
                 let image_clip_input = preprocessing::image_to_clip_format(resized_images);
-                info!("Converted to clip format");
+                trace!("Converted to clip format");
                 
                 // TODO We need to handle failures here. They seem to come up occasionally?
                 //      If we do get a failure, then to avoid just failing for the whole batch,
@@ -232,17 +231,17 @@ impl Clip
                 //        handling was set to crash on error and we weren't logging or something.
                 //        Hopefully there's not just a panic-type thing in ORT, I doubt it,
                 //        unless it's something odd with the GPU side?
-                info!("Encoding images...");
+                trace!("Encoding images...");
                 let image_encodings: Array2<f32> = self.encode_image(image_clip_input)?;
-                info!("Encoded images");
+                trace!("Encoded images");
                 
                 // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
-                info!("Serializing encodings...");
+                trace!("Serializing encodings...");
                 let serialized_encodings: anyhow::Result<Vec<Vec<u8>>> = image_encodings.outer_iter().map(|row| {
                     Ok(bincode::serialize(&row.to_vec())?)
                 }).collect();
                 let serialized_encodings = serialized_encodings?;
-                info!("Serialized encodings");
+                trace!("Serialized encodings");
                 
                 // Insert the image encodings into the image_features_vit_l_14_336_px table
                 // The encoding is serialized with serde.
@@ -265,7 +264,7 @@ impl Clip
                 // The unwrap is safe because we just partitioned, so these are all Err results.
                 let new_failed_encodings: Vec<NewFailedEncoding> = failed_images.into_iter().map(|(uuid, img)| {
                     NewFailedEncoding {
-                        id: uuid.to_string(),
+                        id: uuid,
                         error: img.as_ref().err().expect("Expected error!").to_string(),
                         failed_at: None
                     }
@@ -281,7 +280,7 @@ impl Clip
     }
 
     pub fn encode_files_and_add_to_search(
-        file_ids: &[Uuid],
+        file_ids: &[UUID],
         connection: &mut SqliteConnection,
         clip_state: tauri::State<'_, ClipState>,
         search_state: tauri::State<'_, SearchState<'_>>

@@ -6,7 +6,7 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     // TODO: This should be deprecated and instead use paths-as-strings for unambiguous path serialization.
     //       See ROVER-129.
-    #[error("Error converting PathBuf to String")]
+    #[error("Error converting PathBuf to String. Path is likely not valid UTF-8.")]
     PathBufToString,
 }
 

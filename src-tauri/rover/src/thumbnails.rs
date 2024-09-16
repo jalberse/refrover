@@ -5,7 +5,7 @@ use image::{imageops, DynamicImage, GenericImageView, ImageBuffer, RgbaImage};
 use log::warn;
 use uuid::Uuid;
 
-use crate::{db, models::NewThumbnail, queries, state::ConnectionPoolState};
+use crate::{db, error::Error, models::NewThumbnail, queries, state::ConnectionPoolState, uuid::UUID};
 
 const MAX_THUMBNAIL_DIMENSION: u32 = 600;
 
@@ -34,10 +34,10 @@ pub fn thumbnail(
 /// Returns the UUID of the thumbnail and the full path to the filename (typically in $APPDATA),
 /// inclusing a file::// prefix for rendering in the browser.
 pub fn ensure_thumbnail_exists(
-    file_id: Uuid,
+    file_id: UUID,
     app_handle: &tauri::AppHandle,
     pool_state: &tauri::State<'_, ConnectionPoolState>
-) -> anyhow::Result<(Uuid, String)>
+) -> anyhow::Result<(UUID, String)>
 {
     let mut connection = db::get_db_connection(pool_state)?;
 
@@ -53,14 +53,14 @@ pub fn ensure_thumbnail_exists(
 
             if full_path.exists() {
                 return Ok((
-                    Uuid::parse_str(&thumbail.id)?,
-                    full_path.to_str().ok_or(anyhow::anyhow!("Error converting path"))?.to_string()
+                    thumbail.id,
+                    full_path.to_str().ok_or(Error::PathBufToString)?.to_string()
                 ));
             }
 
             // The thumbnail exists in the DB but not on disk.
             // Delete the DB entry.
-            queries::delete_thumbnail_by_id(Uuid::parse_str(&thumbail.id)?, &mut connection)?;
+            queries::delete_thumbnail_by_id(thumbail.id, &mut connection)?;
         },
         None => {},
     }
@@ -68,7 +68,7 @@ pub fn ensure_thumbnail_exists(
     // The thumbnail was not present in the DB, or it was present but not on disk.
     // Generate the a new thumbnail for the file.
 
-    let new_thumbnail_id = Uuid::new_v4();
+    let new_thumbnail_id: UUID = Uuid::new_v4().into();
     let new_thumbnail_filename = format!("{}.webp", new_thumbnail_id);
     let new_thumbnail_full_path = app_data_path.join(&new_thumbnail_filename);
 
@@ -122,8 +122,8 @@ pub fn ensure_thumbnail_exists(
 
     // Add the thumbnail to the thumbnails table.
     let new_thumbnail_db = NewThumbnail {
-        id: &new_thumbnail_id.to_string(),
-        file_id: &file_id.to_string(),
+        id: new_thumbnail_id,
+        file_id,
         path: &new_thumbnail_filename,
     };
 

@@ -3,6 +3,8 @@ use diesel::sql_types::Integer;
 use serde::Serialize;
 use time;
 
+use crate::uuid::UUID;
+
 #[derive(QueryableByName)]
 pub struct RowsAffected {
     #[sql_type = "Integer"]
@@ -14,15 +16,15 @@ pub struct RowsAffected {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct FileTags {
-    pub file_id: String,
-    pub tag_id: String,
+    pub file_id: UUID,
+    pub tag_id: UUID,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::file_tags)]
-pub struct NewFileTag<'a> {
-    pub file_id: &'a str,
-    pub tag_id: &'a str,
+pub struct NewFileTag {
+    pub file_id: UUID,
+    pub tag_id: UUID,
 }
 
 #[derive(Queryable, Selectable)]
@@ -30,38 +32,30 @@ pub struct NewFileTag<'a> {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct File {
-    pub id: String,
+    pub id: UUID,
     pub filepath: String,
-    pub watched_directory_id: Option<String>,
+    pub watched_directory_id: Option<UUID>,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::files)]
-pub struct NewFile<'a> {
-    pub id: &'a str,
-    pub filepath: &'a str,
-    pub watched_directory_id: Option<&'a str>,
-}
-
-#[derive(Insertable, Debug)]
-#[diesel(table_name = crate::schema::files)]
-pub struct NewFileOwned {
-    pub id: String,
+pub struct NewFile {
+    pub id: UUID,
     pub filepath: String,
-    pub watched_directory_id: Option<String>,
+    pub watched_directory_id: Option<UUID>,
 }
 
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::watched_directories)]
 pub struct WatchedDirectory {
-    pub id: String,
+    pub id: UUID,
     pub filepath: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::watched_directories)]
 pub struct NewWatchedDirectory<'a> {
-    pub id: &'a str,
+    pub id: UUID,
     pub filepath: &'a str,
 }
 
@@ -70,27 +64,27 @@ pub struct NewWatchedDirectory<'a> {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct TagEdge {
-    pub id: String,
-    pub entry_edge_id: String,
-    pub direct_edge_id: String,
-    pub exit_edge_id: String,
-    pub start_vertex_id: String,
-    pub end_vertex_id: String,
+    pub id: UUID,
+    pub entry_edge_id: UUID,
+    pub direct_edge_id: UUID,
+    pub exit_edge_id: UUID,
+    pub start_vertex_id: UUID,
+    pub end_vertex_id: UUID,
     pub hops: i32,
-    pub source_id: String,
+    pub source_id: UUID,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::tag_edges)]
-pub struct NewTagEdge<'a> {
-    pub id: &'a str,
-    pub entry_edge_id: &'a str,
-    pub direct_edge_id: &'a str,
-    pub exit_edge_id: &'a str,
-    pub start_vertex_id: &'a str,
-    pub end_vertex_id: &'a str,
+pub struct NewTagEdge {
+    pub id: UUID,
+    pub entry_edge_id: UUID,
+    pub direct_edge_id: UUID,
+    pub exit_edge_id: UUID,
+    pub start_vertex_id: UUID,
+    pub end_vertex_id: UUID,
     pub hops: i32,
-    pub source_id: &'a str,
+    pub source_id: UUID,
 }
 
 #[derive(Queryable, Selectable)]
@@ -98,14 +92,14 @@ pub struct NewTagEdge<'a> {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct Tags {
-    pub id: String,
+    pub id: UUID,
     pub name: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::tags)]
 pub struct NewTag<'a> {
-    pub id: &'a str,
+    pub id: UUID,
     pub name: &'a str,
 }
 
@@ -121,14 +115,14 @@ pub struct NewImageFeaturesVitL14336Px<'a> {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct ImageFeatureVitL14336Px {
-    pub id: String,
+    pub id: UUID,
     pub feature_vector: Vec<u8>,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::failed_encodings)]
 pub struct NewFailedEncoding {
-    pub id: String,
+    pub id: UUID,
     pub error: String,
     // When timestamp is None, the current time (the SQL default) is used.\
     // https://docs.rs/diesel/latest/diesel/fn.insert_into.html#inserting-default-value-for-a-column
@@ -140,15 +134,15 @@ pub struct NewFailedEncoding {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
 pub struct Thumbnail {
-    pub id: String,
-    pub file_id: String,
+    pub id: UUID,
+    pub file_id: UUID,
     pub path: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::thumbnails)]
 pub struct NewThumbnail<'a> {
-    pub id: &'a str,
-    pub file_id: &'a str,
+    pub id: UUID,
+    pub file_id: UUID,
     pub path: &'a str,
 }

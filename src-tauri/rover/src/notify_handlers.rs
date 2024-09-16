@@ -4,9 +4,8 @@ use std::path::PathBuf;
 use log::{error, info, trace};
 use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
-use uuid::Uuid;
 
-use crate::{ann, clip::Clip, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}};
+use crate::{clip::Clip, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
 
 
 pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
@@ -15,7 +14,7 @@ pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Durati
 pub struct FsEventHandler
 {
     pub app_handle: tauri::AppHandle,
-    pub watch_directory_id: Uuid,
+    pub watch_directory_id: UUID,
     pub watch_directory_path: PathBuf,
 }
 
@@ -266,7 +265,7 @@ impl FsEventHandler {
     {
         // Insert the files into the DB and get their new UUIDs.
         let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
-        let insert_result = queries::insert_files(&new_files, &mut connection, &Some(self.watch_directory_id));
+        let insert_result = queries::insert_files(&new_files, &mut connection, Some(self.watch_directory_id));
         if let Err(e) = &insert_result {
             error!("Error inserting new files into DB: {:?}", e);
         }
@@ -274,7 +273,7 @@ impl FsEventHandler {
 
         let file_ids = new_files.iter().map(|file| {
             file.0.clone()
-        }).collect::<Vec<Uuid>>();
+        }).collect::<Vec<UUID>>();
         
         let clip_state = self.app_handle.state::<ClipState>();
         let search_state = self.app_handle.state::<SearchState>();

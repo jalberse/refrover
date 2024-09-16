@@ -9,7 +9,6 @@ use app::ann;
 use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
-use app::notify_handlers;
 use app::state::ClipState;
 use app::state::ClipTokenizerState;
 use app::state::ConnectionPoolState;

@@ -6,13 +6,14 @@ use std::path::PathBuf;
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use ndarray::{Array, Array2, Dim};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use uuid::Uuid;
+
+use crate::uuid::UUID;
 
 pub const IMAGE_INPUT_SIZE: usize = 336;
 pub const CONTEXT_LENGTH: usize = 77;
 pub const FEATURE_VECTOR_LENGTH: usize = 768;
 
-pub fn load_image_batch(paths: &[(Uuid, PathBuf)]) -> Vec<(Uuid, anyhow::Result<Box<DynamicImage>>)>
+pub fn load_image_batch(paths: &[(UUID, PathBuf)]) -> Vec<(UUID, anyhow::Result<Box<DynamicImage>>)>
 {
 	// Load the images in parallel
 	let images = paths.par_iter().map(
@@ -29,12 +30,12 @@ pub fn load_image_batch(paths: &[(Uuid, PathBuf)]) -> Vec<(Uuid, anyhow::Result<
 				}
 			}
 		}
-	}).collect::<Vec<(Uuid, anyhow::Result<Box<DynamicImage>>)>>();
+	}).collect::<Vec<(UUID, anyhow::Result<Box<DynamicImage>>)>>();
 
 	images
 }
 
-pub fn resize_images(images: Vec<(Uuid, Box<DynamicImage>)>) -> Vec<(Uuid, Box<DynamicImage>)>
+pub fn resize_images(images: Vec<(UUID, Box<DynamicImage>)>) -> Vec<(UUID, Box<DynamicImage>)>
 {
 	// Resize the images in parallel
 	let resized_images = images.par_iter().map(
@@ -48,13 +49,14 @@ pub fn resize_images(images: Vec<(Uuid, Box<DynamicImage>)>) -> Vec<(Uuid, Box<D
 					FilterType::CatmullRom);
 			(*uuid, Box::new(img))
 		}
-	}).collect::<Vec<(Uuid, Box<DynamicImage>)>>();
+	}).collect::<Vec<(UUID, Box<DynamicImage>)>>();
 
 	resized_images
 }
 
 // Convert the images to a 4D array expected by CLIP
-pub fn image_to_clip_format(images: Vec<(Uuid, Box<DynamicImage>)>) -> Array<f32, Dim<[usize; 4]>>
+// TODO I don't think we use the UUID here. Remove?
+pub fn image_to_clip_format(images: Vec<(UUID, Box<DynamicImage>)>) -> Array<f32, Dim<[usize; 4]>>
 {
 	// Convert the images to arrays
 	let mut image_input = Array::zeros((images.len(), 3, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE));

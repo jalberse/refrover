@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::uuid::UUID;
+
 /// The payload of a message sent from the front-end to the back-end.
 #[derive(Serialize, Deserialize, Default, PartialEq, Clone)]
 pub struct Payload 
@@ -12,19 +14,13 @@ pub struct Payload
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Thumbnail
 {
-    pub uuid: ThumbnailUuid,
-    pub file_uuid: FileUuid,
+    pub uuid: UUID,
+    pub file_uuid: UUID,
     pub path: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub struct ThumbnailUuid(pub String);
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub struct FileUuid(pub String);
 
 /// The size of an image, in pixels.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -36,10 +32,10 @@ pub struct ImageSize
 
 /// The metadata for a file; currently, image files.
 /// This may include e.g. EXIF metadata, but also metadata from RefRover such as the file ID.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileMetadata
 {
-    pub file_id: String,
+    pub file_id: UUID,
     pub filename: String,
     pub thumbnail_filepath: String,
     pub image_type: Option<imghdr::Type>,
@@ -52,6 +48,8 @@ pub struct FileMetadata
 #[cfg(test)]
 mod tests 
 {
+    use uuid::Uuid;
+
     use super::*;
 
     #[test]
@@ -68,7 +66,7 @@ mod tests
     {
         let metadata = FileMetadata
         {
-            file_id: "1234".to_string(),
+            file_id: Uuid::new_v4().into(),
             filename: "test.jpg".to_string(),
             thumbnail_filepath: "/path/to/test.jpg".to_string(),
             image_type: Some(imghdr::Type::Jpeg),
