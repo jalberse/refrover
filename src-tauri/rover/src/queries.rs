@@ -22,19 +22,6 @@ pub fn add_tag_edge(start_vertex_id: UUID, end_vertex_id: UUID, source: UUID, co
    // See https://www.codeproject.com/Articles/22824/A-Model-to-Represent-Directed-Acyclic-Graphs-DAG-o
    use crate::schema::tag_edges;
 
-   // TODO - Generating the UUIDs here necessitates a series of inserts rather than a batch insert from the select statements.
-   //        Could there be a better way? Generating UUIDS in SQLite? Auto-incrementing IDs?
-   //        This is likely totally fine, however, so I won't prematurely optimize.
-
-   // TODO Change our UUIDs to use some wrapper class
-   //      https://github.com/diesel-rs/diesel/issues/364
-   //      Would be binary (or I could go text) in the DB.
-   //      I actually like text, for debugging purposes.
-
-   // TODO This does seem to be working. Render it, and let the user filter files by tags by selecting in the tree.
-   //      https://github.com/jpb12/react-tree-graph/tree/master/.storybook/stories
-   //      We probably want this I guess.
-
    let result = connection.transaction(|connection| {
       let edge_exists = select(exists(tag_edges::table
          .filter(tag_edges::start_vertex_id.eq(start_vertex_id.to_string()))
