@@ -461,7 +461,7 @@ pub fn get_image_feature_data(ids: &[UUID], connection: &mut SqliteConnection) -
 
    let image_feature_data = image_features_vit_l_14_336_px
       .select(ImageFeatureVitL14336Px::as_select())
-      .filter(id.eq_any(ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
+      .filter(id.eq_any(ids))
       .load(connection)?;
 
    Ok(image_feature_data)
@@ -529,11 +529,10 @@ pub fn get_filepaths(file_ids: &[UUID], connection: &mut SqliteConnection) -> an
 {
    use crate::schema::files;
 
-   let ids_strings = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
 
    let filepaths: Vec<(UUID, String)> = files::table
       .select((files::id, files::filepath))
-      .filter(files::id.eq_any(ids_strings))
+      .filter(files::id.eq_any(file_ids))
       .load(connection)?;
 
    let out = filepaths.into_iter().map(|(id, filepath)| (id, PathBuf::from(filepath))).collect();
@@ -544,8 +543,6 @@ pub fn get_filepaths(file_ids: &[UUID], connection: &mut SqliteConnection) -> an
 pub fn get_files_in_watched_directories(watched_dir_uuids: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<Vec<UUID>>
 {
    use crate::schema::files;
-
-   let watched_dir_uuids = watched_dir_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
 
    let file_ids: Vec<UUID> = files::table
       .select(files::id)
@@ -685,7 +682,6 @@ fn delete_watched_directories(watched_directories_uuids: &[UUID], connection: &m
 {
    use crate::schema::watched_directories;
 
-   // TODO This and in other fns, we don't need to convert to String anymore. UUIDs, yay.
    diesel::delete(watched_directories::table.filter(watched_directories::id.eq_any(watched_directories_uuids)))
       .execute(connection)?;
 
@@ -744,7 +740,7 @@ pub fn delete_files_encodings(file_ids: &[UUID], connection: &mut SqliteConnecti
 {
    use crate::schema::image_features_vit_l_14_336_px;
 
-   diesel::delete(image_features_vit_l_14_336_px::table.filter(image_features_vit_l_14_336_px::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
+   diesel::delete(image_features_vit_l_14_336_px::table.filter(image_features_vit_l_14_336_px::id.eq_any(file_ids)))
       .execute(connection)?;
 
    Ok(())
@@ -754,7 +750,7 @@ pub fn delete_failed_encodings(file_ids: &[UUID], connection: &mut SqliteConnect
 {
    use crate::schema::failed_encodings;
 
-   diesel::delete(failed_encodings::table.filter(failed_encodings::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
+   diesel::delete(failed_encodings::table.filter(failed_encodings::id.eq_any(file_ids)))
       .execute(connection)?;
 
    Ok(())
@@ -764,7 +760,7 @@ pub fn delete_files_tags(file_ids: &[UUID], connection: &mut SqliteConnection) -
 {
    use crate::schema::file_tags;
 
-   diesel::delete(file_tags::table.filter(file_tags::file_id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
+   diesel::delete(file_tags::table.filter(file_tags::file_id.eq_any(file_ids)))
       .execute(connection)?;
 
    Ok(())
