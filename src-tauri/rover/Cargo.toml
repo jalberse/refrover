@@ -44,6 +44,7 @@ tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", br
 log = "^0.4"
 kamadak-exif = "0.5.5"
 notify-debouncer-full = "0.3.1"
+paths-as-strings = "0.1.1"
 
 [dependencies.uuid]
 version = "1.10.0"

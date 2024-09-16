@@ -8,6 +8,9 @@ use uuid::Uuid;
 
 use crate::{ann, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}};
 
+
+pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Called by the FsInnerWatcherState, which Tauri manages, to handle events.
 pub struct FsEventHandler
 {

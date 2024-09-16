@@ -6,6 +6,7 @@ use tauri::Manager;
 use uuid::Uuid;
 
 use crate::models::NewFileOwned;
+use crate::notify_handlers::{FsEventHandler, FS_WATCHER_DEBOUNCER_DURATION};
 use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState};
 use crate::{db, junk_drawer, queries, thumbnails};
 use crate::{preprocessing, state::SearchState};
@@ -182,13 +183,17 @@ pub async fn fetch_metadata(
 /// directories and invoke this command for each one.
 #[tauri::command]
 pub async fn add_watched_directory(
-    directory_path: String,
+    directory: String,
     watcher_state: tauri::State<'_, FsWatcherState>,
     clip_state: tauri::State<'_, ClipState>,
     pool_state: tauri::State<'_, ConnectionPoolState>,
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
+    // TODO - consider - we don't want to allow a new watched dir that is a subdirectory of an existing watched dir, OR a parent of an existing watched dir.
+    //      That (as well as checking if it already exists and perhaps exists on the filesystem) should be in some validate_new_watched_dir command or something,
+    //      which would be non-async.
+
     // TODO Consider if we want to make watched directories recursive.
     //      I strongly suspect we do - we'd want to drop folders into a top level scheme and have access.
     // If we do so, then when the user wants to add a new watched dir to their list, we should stop
@@ -209,8 +214,6 @@ pub async fn add_watched_directory(
     //      including potentially a lot of intermediary folders.
     //      I think things just get conceptually simpler if files stored the absolute filepath.
 
-
-
     // TODO Okay, I'm cutting out the base_directories table. change this to add the watched directory.
     // TODO We'll make the switch keeping the watched dirs flat, and then move to make them recursive.
     // TODO And once we do that, we'll want the frontend to check that the directory isn't already watched by an ancestor directory.
@@ -219,8 +222,7 @@ pub async fn add_watched_directory(
     //      Maybe we need a separate, non-async command for that which just checks if a directory is already watched (contained in another watched dir).
     //      Non-async commands are fine as long as we're just quickly checking the DB or something.
 
-
-    let directory_path = std::path::Path::new(&directory_path);
+    let directory_path = std::path::Path::new(&directory);
     
     if !directory_path.is_dir() {
         return Err(anyhow::anyhow!("Directory {:?} does not exist, is not a directory, or there are permissions/access errors.", directory_path).into());
@@ -234,16 +236,37 @@ pub async fn add_watched_directory(
         return Err(anyhow::anyhow!("Attempted to add Directory {:?}, which is already in the database.", directory_path).into());
     }
 
+    // I expect this directory should already be allowed via a call to open(): https://tauri.app/v1/api/js/dialog/#open
+    // But we'll ensure it's allowed here, too.
     tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, true).into_ta_result()?;
 
-    // Start watching the directory for new files
-    let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
-    watcher_debouncer.watcher().watch(directory_path, RecursiveMode::NonRecursive).into_ta_result()?;
-
+    // TODO Should we wrap this in a transaction so we can revert it if we e.g. fail to create a watcher?
+    // https://docs.diesel.rs/2.0.x/diesel/connection/trait.Connection.html#method.transaction
     let watched_dir_uuid = queries::insert_watched_directory(
-        &directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string")).into_ta_result()?,
+        &directory,
         &mut connection
     ).into_ta_result()?;
+
+    let fs_event_handler = FsEventHandler {
+        app_handle: app_handle.clone(),
+        watch_directory_id: watched_dir_uuid,
+        watch_directory_path: directory_path.to_path_buf(),
+    };
+    let watcher = notify_debouncer_full::new_debouncer(
+        FS_WATCHER_DEBOUNCER_DURATION,
+        None,
+        fs_event_handler).into_ta_result()?;
+
+    // Add to the map of watchers in the app state.
+    // Note that an alternative architecture would be to have *one* watcher and just have it watch
+    // multiple directories; however, we want to be able to track *which* watcher emitted an event,
+    // which isn't possible by default. So we create a watcher for each directory, storing the watched
+    // directory ID and path in the event handler.
+    // This is a recommended pattern from `notify` https://docs.rs/notify/latest/notify/#with-different-configurations
+    {
+        let mut watcher_state = watcher_state.0.lock().unwrap();
+        watcher_state.watchers.insert(directory.clone(), watcher);
+    }
 
     // TODO We're switching to recursively watched directories, so we'll need to add sub-directory files, too.
     
@@ -271,6 +294,13 @@ pub async fn add_watched_directory(
         
     queries::insert_files_rows(&new_file_rows, &mut connection).into_ta_result()?;
 
+    // TODO Alright we are *crashing* somewhere in here lol. Surprising. We do add the watched dir, that's fine. We add 112 files...
+    // So we're getting to ~here. Uh oh, a crash encoding files?
+    // Well, I do unwrap in encode_image_files(), so maybe my assumptions that unwrapping is find are wrong! First port of call.
+    //    We should then propogate any errors (unless ONNX is panicing for something? I would assume that ONNX would try to recover and you can't just brick your device...)    
+    // (note that the unwrap on the mutex *should* be fine, as that only panics if a blocking thread has panicked. In which case the issue is in the blocking thread.
+    //       AND we have no blocking threads unless I'm insane).
+
     // Encode images and store results in the DB.
     // Note this is relatively long-running; this command is async, so it will not block the main thread.
     // But it's a good idea to keep this as the last step in the command so other tables are updated quickly.
@@ -286,7 +316,7 @@ pub async fn add_watched_directory(
 /// Deletes a watched directory and all its contents from the database.
 #[tauri::command]
 pub async fn delete_watched_directory(
-    directory_path: String,
+    directory: String,
     watcher_state: tauri::State<'_, FsWatcherState>,
     pool_state: tauri::State<'_, ConnectionPoolState>,
     app_handle: tauri::AppHandle,
@@ -296,16 +326,19 @@ pub async fn delete_watched_directory(
     // so if they get added back easily? But that adds complexity to the simple case of just
     // straightforwardly adding/deleting things. Just go simple for now.
 
-    let directory_path = std::path::Path::new(&directory_path);
+    let directory_path = std::path::Path::new(&directory);
 
-    let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
-    watcher_debouncer.watcher().unwatch(directory_path).into_ta_result()?;
+    // TODO Rework this delete to handle the new vec of watchers.
+    //      Maybe we should store a map instead so we can quickly get it from the path.
 
-    let directory_path_str = directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?;
+    {
+        let watchers = &mut watcher_state.0.lock().unwrap();
+        // Remove this directory from the watchers map.
+        watchers.watchers.remove(&directory);
+    }
 
     let mut connection = pool_state.get_connection().into_ta_result()?;
-    let watched_dir_uuid = queries::get_watched_directory_from_path(
-        directory_path_str, &mut connection).into_ta_result()?;
+    let watched_dir_uuid = queries::get_watched_directory_from_path(&directory, &mut connection).into_ta_result()?;
 
     match watched_dir_uuid {
         Some(uuid) => {
@@ -318,3 +351,8 @@ pub async fn delete_watched_directory(
         }
     }
 }
+
+// TODO We want non-blocking (non-async) commands that just check if a directory is watched already or not (and maybe check if it exists on DB or something?)
+//      We'll call that when we want to add/remove dirs from our list.
+//      Then we'll call the async commands to actually add/remove them, which would take longer.
+//   Possibly we want to mark them as deleted? And then we have a command that says "okay take a dir marked for deletion and go do that".

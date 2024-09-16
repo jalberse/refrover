@@ -32,7 +32,6 @@ const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 #[cfg(not(debug_assertions))]
 const LOG_LEVEL: LevelFilter = LevelFilter::Warn;
 
-const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
 
 fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
@@ -92,40 +91,20 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            
-            // TODO We need a table that stores the watched directories.
-            //      We need to populate the front-end with them,
-            //      and create watchers for them.
-            //      Right now it's hardcoded to D:\refrover_photos that gets added on click.
-
             // TODO For files that were added while the program *wasn't* running, we need to
             // scan them and add them to the HNSW index (and any other relevant tables).
             // Thumbnails we can ignore for now, generating them on the fly is OK.
             // We'll probably share a lot of code with that in the FS watcher.
             // In fact, we might want to do it in an initial scan callback...? Maybe not.
 
-            // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
-            tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
+            // TODO We need a table that stores the watched directories.
+            //      We need to populate the front-end with them,
+            //      and create watchers for them.
+            //      Right now it's hardcoded to D:\refrover_photos that gets added on click.
 
-            // TODO We will instead make the FsWatcherState a Vec of watchers, each storing their path/id.
-            //      When we add/remove a watched directory, we add/remove a watcher.
-            //      We do this so that we know which watched directory events are coming from.
-            // https://docs.rs/notify/latest/notify/index.html#with-different-configurations
-            //      That's recommended by the docs, so I don't think there's a performance concern?
-            let fs_event_handler = notify_handlers::FsEventHandler {
-                app_handle: app.handle().clone(),
-            };
-            let watcher = notify_debouncer_full::new_debouncer(FS_WATCHER_DEBOUNCER_DURATION, None, fs_event_handler);
-            match watcher {
-                Ok(watcher) => {
-                    let watcher_state = FsWatcherState(Mutex::new(FsInnerWatcherState { watcher }));
-                    app.manage(watcher_state);
-                },
-                Err(e) => {
-                    error!("Error initializing FS watcher: {:?}", e);
-                    return Err(anyhow::Error::new(e).into());
-                }
-            }
+            // TODO And probably initialize a default watche directory if it doesn't exist?
+            let watcher_state = FsWatcherState(Mutex::new(FsInnerWatcherState { watchers: std::collections::HashMap::new() }));
+            app.manage(watcher_state);
 
             // We rebuild every time the app launches;
             // it is fast enough, and it handles the fact that

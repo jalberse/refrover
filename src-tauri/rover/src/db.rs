@@ -9,13 +9,11 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use image::DynamicImage;
-use ndarray::Array2;
 use uuid::Uuid;
 
-use crate::models::{NewBaseDirectory, NewFile, NewFileTag, NewImageFeaturesVitL14336Px, NewTag, NewFailedEncoding};
+use crate::models::NewTag;
 use crate::state::ConnectionPoolState;
-use crate::{clip, db, preprocessing, schema};
+use crate::db;
 use crate::queries::{add_tag_edge, delete_tag_edge, get_edge_id};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
@@ -84,7 +82,6 @@ pub fn init(pool_state: &tauri::State<'_, ConnectionPoolState>, populate_dummy_d
     // TODO Remove this eventually, it's just for testing. We will eventually be populating the DB via the UI and calling into more specific functions.
     if populate_dummy_data {
         populate_db_dummy_data_tags(pool_state)?;
-        populate_image_features(pool_state)?;
     }
 
     Ok(())
@@ -117,7 +114,7 @@ fn get_db_path(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 
 fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()>
 {
-    use crate::schema::{base_directories, file_tags, files, tags};
+    use crate::schema::{file_tags, files, tags};
 
     let base_dir = "D:\\refrover_photos";
     let connection = &mut db::get_db_connection(pool_state)?;
@@ -218,95 +215,4 @@ fn populate_db_dummy_data_tags(pool_state: &tauri::State<'_, ConnectionPoolState
 
     
     Ok(())
-}
-
-// To be called after populate_dummy_data
-// TODO This isn't a final function, I am hacking a test together,
-//   but snippets of it will probably be useful.
-//   For example, this totally hangs (could be IO, and we need to ensure we use a CUDA provider not CPU for our runtime)
-//   But in any case, we'd want it to be some asynch task that's going and updating our KNN and table in the background
-//   while users are allowing to continue using the app while that search information is updated for later.
-//  TODO (Also check the system resources while we're doing this to see if we're hitting the GPU and IO stuff)
-fn populate_image_features(pool_state: &tauri::State<'_, ConnectionPoolState>) -> anyhow::Result<()>
-{
-    // Query for all of the filepaths by joining the base_directories and files tables.
-
-    use schema::image_features_vit_l_14_336_px::dsl::*;
-    use schema::files::dsl::*;
-    use schema::base_directories::dsl::*;
-    use schema::failed_encodings;
-
-    // Load our CLIP model.
-    let clip = clip::Clip::new()?;
-
-    let connection = &mut db::get_db_connection(pool_state)?;
-
-    let all_files: Vec<(String, String, String)> = base_directories.inner_join(files)
-        .select((schema::files::dsl::id, path, relative_path))
-        .load::<(String, String, String)>(connection)?;
-
-    // TODO call clip::encode_image_files() instead. This is all temporary code anyways I guess but still... 
-    for chunk in all_files.chunks(64)
-    {
-        // Get a vec of pathbufs to images
-        let paths: anyhow::Result<Vec<(Uuid, PathBuf)>> = chunk.iter().map(|(uuid, base, rel) | {
-            Ok((Uuid::parse_str(uuid)?, PathBuf::from(Path::new(&base).join(rel))))
-        }).collect();
-        let paths = paths?;
-        
-        // Load and preprocess our images.
-        let images = preprocessing::load_image_batch(&paths);
-        
-        // Split images into those that succesfully loaded and those that failed.
-        // Images may fail to load because they are not images, not found, etc.
-        let (images, failed_images) = images.into_iter().partition::<Vec<_>, _>(|(_, img)| img.is_ok());
-
-        // Handle images that succesfully loaded.
-        // Unwrap the succesful images. This is safe because we just partitioned.
-        let images: Vec<(Uuid, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.unwrap())).collect();
-        let resized_images = preprocessing::resize_images(images);
-        let image_clip_input = preprocessing::image_to_clip_format(resized_images);
-
-        let image_encodings: Array2<f32> = clip.encode_image(image_clip_input)?;
-
-        // Serialize each image encodings with bincode; convert the first axis of the ndarray to a vec
-        let serialized_encodings: anyhow::Result<Vec<Vec<u8>>> = image_encodings.outer_iter().map(|row| {
-            Ok(bincode::serialize(&row.to_vec())?)
-        }).collect();
-        let serialized_encodings = serialized_encodings?;
-        
-        // Insert the image encodings into the image_features_vit_l_14_336_px table
-        // The encoding is serialized with serde.
-        // The ID of the encoding is the same as the file ID.
-        let new_image_features: Vec<NewImageFeaturesVitL14336Px> = chunk.iter().zip(serialized_encodings.iter()).map(|((file_id, _, _), encoding)| {
-            NewImageFeaturesVitL14336Px {
-                id: file_id.to_string(),
-                feature_vector: encoding
-            }
-        }).collect();
-        
-        diesel::insert_into(image_features_vit_l_14_336_px)
-            .values(&new_image_features)
-            .execute(connection)?;
-        
-        // Convert the failed images into NewFailedEncoding structs and insert them into the failed_encodings table.
-        // The unwrap is safe because we just partitioned, so these are all Err results.
-        let new_failed_encodings: Vec<NewFailedEncoding> = failed_images.into_iter().map(|(uuid, img)| {
-            NewFailedEncoding {
-                id: uuid.to_string(),
-                error: img.as_ref().err().unwrap().to_string(),
-                failed_at: None
-            }
-        }).collect();
-
-        diesel::insert_into(failed_encodings::table)
-            .values(&new_failed_encodings)
-            .execute(connection)?;
-    }
-
-    Ok(())
-
-    // The feature vectors should now be in the DB.
-    // TODO - We'll actually have some load_knn() fn or similar that queries for that after this is done.
-    //   We'll need a mechanism to keep that up-to-date with the DB.
 }
