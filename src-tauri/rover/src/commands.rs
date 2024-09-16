@@ -209,14 +209,25 @@ pub async fn add_watched_directory(
     //      including potentially a lot of intermediary folders.
     //      I think things just get conceptually simpler if files stored the absolute filepath.
 
+
+
+    // TODO Okay, I'm cutting out the base_directories table. change this to add the watched directory.
+    // TODO We'll make the switch keeping the watched dirs flat, and then move to make them recursive.
+    // TODO And once we do that, we'll want the frontend to check that the directory isn't already watched by an ancestor directory.
+    //      ... and we'll want to do that here, returning an error if so.
+    //      I want the frontend to check so that we can check that before adding it to the displayed list of watched dirs...
+    //      Maybe we need a separate, non-async command for that which just checks if a directory is already watched (contained in another watched dir).
+    //      Non-async commands are fine as long as we're just quickly checking the DB or something.
+
+
     let directory_path = std::path::Path::new(&directory_path);
     
     if !directory_path.is_dir() {
-        return Err(anyhow::anyhow!("Directory {:?} does not exist, or is not a directory", directory_path).into());
+        return Err(anyhow::anyhow!("Directory {:?} does not exist, is not a directory, or there are permissions/access errors.", directory_path).into());
     }
 
     let mut connection = pool_state.get_connection().into_ta_result()?;
-    if queries::base_dir_exists(
+    if queries::watched_dir_exists(
             directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?,
             &mut connection
         ).into_ta_result()? {
@@ -229,11 +240,12 @@ pub async fn add_watched_directory(
     let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
     watcher_debouncer.watcher().watch(directory_path, RecursiveMode::NonRecursive).into_ta_result()?;
 
-    let base_dir_uuid = queries::insert_base_directory(
+    let watched_dir_uuid = queries::insert_watched_directory(
         &directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string")).into_ta_result()?,
         &mut connection
     ).into_ta_result()?;
 
+    // TODO We're switching to recursively watched directories, so we'll need to add sub-directory files, too.
     
     // Add its files in the directory to the DB.
     let files = std::fs::read_dir(directory_path).into_ta_result()?;
@@ -252,8 +264,8 @@ pub async fn add_watched_directory(
         Ok(NewFileOwned
             {
                 id: file_uuid.to_string(),
-                base_directory_id: base_dir_uuid.to_string(),
-                relative_path: file_path_str.to_string(),
+                filepath: file_path_str.to_string(),
+                watched_directory_id: Some(watched_dir_uuid.to_string()),
             })
         }).collect::<Result<Vec<NewFileOwned>, anyhow::Error>>()?;
         
@@ -289,18 +301,20 @@ pub async fn delete_watched_directory(
     let watcher_debouncer = &mut watcher_state.0.lock().unwrap().watcher;
     watcher_debouncer.watcher().unwatch(directory_path).into_ta_result()?;
 
+    let directory_path_str = directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?;
+
     let mut connection = pool_state.get_connection().into_ta_result()?;
-    let base_dir_uuid = queries::get_base_dir_id(
-        directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?,
-        &mut connection
-    ).into_ta_result()?;
+    let watched_dir_uuid = queries::get_watched_directory_from_path(
+        directory_path_str, &mut connection).into_ta_result()?;
 
-    if base_dir_uuid.is_none() {
-        info!("Directory {:?} not found in the database. Nothing to do.", directory_path);
-        return Ok(()); // Nothing to do
+    match watched_dir_uuid {
+        Some(uuid) => {
+            queries::delete_watched_directories_cascade(&[uuid], &mut connection, app_handle)?;
+            Ok(())
+        },
+        None => {
+            info!("Directory {:?} not found in the database. Nothing to do.", directory_path);
+            Ok(()) // Nothing to do
+        }
     }
-    let base_dir_uuid = base_dir_uuid.unwrap();
-
-    queries::delete_base_directory_cascade(&[base_dir_uuid], &mut connection, app_handle)?;
-    Ok(())
 }

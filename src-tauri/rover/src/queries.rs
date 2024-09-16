@@ -14,6 +14,7 @@ use uuid::Uuid;
 use diesel::sql_types::Integer;
 
 use crate::models::{ImageFeatureVitL14336Px, NewFileOwned, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::schema::files::watched_directory_id;
 
 pub fn add_tag_edge(start_vertex_id: Uuid, end_vertex_id: Uuid, source: &str, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
 {
@@ -346,46 +347,6 @@ pub fn get_edge_id(start_vertex_id: Uuid, end_vertex_id: Uuid, source_id: &str, 
    }
 }
 
-// Function to query for all files with a given tgag, including parent tags
-pub fn query_files_with_tag(tag_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<Vec<String>>
-{
-    use crate::schema::{file_tags, files, base_directories};
-
-    let tag_ids = find_containing_tags(tag_id, connection)?.into_iter().map(|tag_id| tag_id.to_string()).collect::<Vec<String>>();
-
-    let file_ids = file_tags::table
-        .filter(file_tags::tag_id.eq_any(tag_ids))
-        .select(file_tags::file_id)
-        .load::<String>(connection)?;
-
-    let files: Vec<(String, String)> = files::table
-        .filter(files::id.eq_any(file_ids))
-        .inner_join(base_directories::table.on(files::base_directory_id.eq(base_directories::id)))
-        .select((base_directories::path, files::relative_path))
-        .load::<(String, String)>(connection)?;
-
-    let files = files.into_iter().map(|(parent_dir, relpath)| -> String {
-        let parent_dir = PathBuf::from(parent_dir);
-        let relpath = PathBuf::from(relpath);
-
-        let file_path = parent_dir.join(relpath);
-
-        file_path.to_string_lossy().into_owned()
-    }).collect();
-
-    Ok(files)
-}
-
-// Returns tag_id and its parents
-pub fn find_containing_tags(tag_id: Uuid, connection: &mut SqliteConnection) -> anyhow::Result<Vec<Uuid>>
-{
-   use crate::schema::tag_edges;
-
-    // TODO this is simple now with DAG, do it. Just return for all parents, ignoring number of hops.
-    todo!()
-}
-
-
 // TODO A function that gets the whole tree of tags.
 // It should return JSON that can be used to render the tree.
 // For example, in this format:
@@ -568,9 +529,11 @@ pub fn get_thumbnail_filepaths_by_file_ids(file_ids: &[Uuid], connection: &mut S
 {
    use crate::schema::thumbnails;
 
+   let ids_strings = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+
    let paths: Vec<String> = thumbnails::table
       .select(thumbnails::path)
-      .filter(thumbnails::file_id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
+      .filter(thumbnails::file_id.eq_any(ids_strings))
       .load(connection)?;
 
    Ok(paths)
@@ -579,70 +542,41 @@ pub fn get_thumbnail_filepaths_by_file_ids(file_ids: &[Uuid], connection: &mut S
 pub fn get_filepaths(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
 {
    use crate::schema::files;
-   use crate::schema::base_directories;
 
-   let paths: Vec<(String, String, String)> = files::table
-      .filter(files::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
-      .inner_join(base_directories::table)
-      .select((files::id, base_directories::path, files::relative_path))
+   let ids_strings = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+
+   let filepaths: Vec<(String, String)> = files::table
+      .select((files::id, files::filepath))
+      .filter(files::id.eq_any(ids_strings))
       .load(connection)?;
 
-   let out = paths.into_iter().map(|(file_id, base_dir, rel_path)| {
-      let base_dir = PathBuf::from(base_dir);
-      let rel_path = PathBuf::from(rel_path);
-      // Unwrap should be safe; we know we just parsed it from a UUID retrieving it.
-      (Uuid::parse_str(&file_id).unwrap(), base_dir.join(rel_path))
-   }).collect();
+   let out = filepaths.into_iter().map(|(id, filepath)| (Uuid::parse_str(&id).unwrap(), PathBuf::from(filepath))).collect();
 
    Ok(out)
 }
 
-pub fn get_base_dir_id(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
-{
-   use crate::schema::base_directories;
-
-   let base_dir_id: Option<String> = base_directories::table
-      .select(base_directories::id)
-      .filter(base_directories::path.eq(base_dir))
-      .first(connection)
-      .optional()?;
-
-   match base_dir_id {
-      Some(base_dir_id) => Ok(Some(Uuid::parse_str(&base_dir_id)?)),
-      None => Ok(None)
-   }
-}
-
-pub fn base_dir_exists(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<bool>
-{
-   let id = get_base_dir_id(base_dir, connection)?;
-   match id {
-      Some(_) => Ok(true),
-      None => Ok(false)
-   }
-}
-
-pub fn get_files_in_directories(base_dir_uuids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<Uuid>>
+pub fn get_files_in_watched_directories(watched_dir_uuids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<Vec<Uuid>>
 {
    use crate::schema::files;
 
+   let watched_dir_uuids = watched_dir_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+
    let file_ids: Vec<String> = files::table
       .select(files::id)
-      .filter(files::base_directory_id.eq_any(base_dir_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>()))
+      .filter(files::watched_directory_id.eq_any(watched_dir_uuids))
       .load(connection)?;
 
    let file_ids = file_ids.into_iter().map(|file_id| Uuid::parse_str(&file_id).unwrap()).collect();
    Ok(file_ids)
 }
 
-pub fn get_file_id_from_base_dir_and_relative_path(base_dir: &Uuid, rel_path: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
+pub fn get_file_id_from_filepath(filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
 {
    use crate::schema::files;
 
    let file_id: Option<String> = files::table
       .select(files::id)
-      .filter(files::base_directory_id.eq(base_dir.to_string()))
-      .filter(files::relative_path.eq(rel_path))
+      .filter(files::filepath.eq(filepath))
       .first(connection)
       .optional()?;
 
@@ -652,12 +586,12 @@ pub fn get_file_id_from_base_dir_and_relative_path(base_dir: &Uuid, rel_path: &s
    }
 }
 
-pub fn update_filename(file_id: &Uuid, new_filename: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn update_filepath(file_id: &Uuid, new_filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<()>
 {
    use crate::schema::files;
 
    diesel::update(files::table.filter(files::id.eq(file_id.to_string())))
-      .set(files::relative_path.eq(new_filename))
+      .set(files::filepath.eq(new_filepath))
       .execute(connection)?;
 
    Ok(())
@@ -665,79 +599,31 @@ pub fn update_filename(file_id: &Uuid, new_filename: &str, connection: &mut Sqli
 
 // Inserts the given files into the database, updating the base_directory and files tables.
 // Returns the UUIDs of the inserted files.
-pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
+pub fn insert_files(files: &[PathBuf], connection: &mut SqliteConnection, watched_dir_uuid: &Option<Uuid>) -> anyhow::Result<Vec<(Uuid, PathBuf)>>
 {
    use crate::schema::files;
-   use crate::schema::base_directories;
 
-   // Fun with maps! You can get the unique values from a collection by collecting them into a HashSet.
-   let binding = files.iter()
-      .map(|file| file.parent().unwrap().to_string_lossy().to_string())
-      .collect::<std::collections::HashSet<String>>();
-   let unique_base_dirs: Vec<String> = binding
-      .into_iter()
-      .collect();
+   let watched_directory_id_str = watched_dir_uuid.as_ref().map(|uuid| uuid.to_string());
 
-   let mut base_dir_id_map = std::collections::HashMap::<String, Uuid>::new();
-   for base_dir in &unique_base_dirs {
-      // First, check if the base directory already exists in the database.
-      let result = base_directories::table
-         .select(base_directories::id)
-         .filter(base_directories::path.eq(base_dir))
-         .first::<String>(connection)
-         .optional()?;
-      
-      match result {
-         // If the base directory exists, store the ID in the map.
-         Some(base_dir_id) => {
-            base_dir_id_map.insert(base_dir.clone(), Uuid::parse_str(&base_dir_id)?);
-         },
-         // If it does not, we'll insert a new entry for it.
-         None => {
-            let base_dir_id = Uuid::new_v4();
-            // TODO - Use paths-as-strings here instead.
-            let new_base_dir = crate::models::NewBaseDirectory {
-               id: &base_dir_id.to_string(),
-               path: &base_dir,
-            };
-            
-            diesel::insert_into(base_directories::table)
-               .values(new_base_dir)
-               .execute(connection)?;
-      
-            base_dir_id_map.insert(base_dir.clone(), base_dir_id);
-         }
-      }
-   }
-
-   // Insert the relative paths into the files table.
-   // Use the base_dir_id_map to get the base directory ID for each file.
-   let mut result = Vec::new();
-   let new_file_entries: Vec<NewFileOwned> = files.iter().map(|file| {
-      // TODO use paths-as-strings here instead.
-      let base_dir = file.parent().unwrap().to_string_lossy().to_string();
-      let filename = file.file_name().unwrap().to_string_lossy().to_string();
-
-      let base_dir_id = base_dir_id_map.get(&base_dir).unwrap();
+   // TODO Consider using RETURNING clause instead to get the UUIDs/paths of inserted rows.
+   let files = files.iter().map(|file| {
       let file_id = Uuid::new_v4();
-
-      // Track the ID with the file path for output.
-      result.push((file_id, file.clone()));
-
-      let new_file_entry = NewFileOwned {
+      let new_file = NewFileOwned {
          id: file_id.to_string(),
-         base_directory_id: base_dir_id.to_string(),
-         relative_path: filename,
+         // TODO use paths-as-strings crate instead.
+         filepath: file.to_string_lossy().to_string(),
+         watched_directory_id: watched_directory_id_str.clone(),
       };
+      (file_id, file.clone(), new_file)
+   }).collect::<Vec<(Uuid, PathBuf, NewFileOwned)>>();
 
-      new_file_entry
-   }).collect();
+   let rows = files.iter().map(|(_, _, new_file)| new_file).collect::<Vec<&NewFileOwned>>();
 
    diesel::insert_into(files::table)
-      .values(&new_file_entries)
+      .values(rows)
       .execute(connection)?;
 
-   Ok(result)
+   Ok(files.into_iter().map(|(file_id, file, _)| (file_id.clone(), file.clone())).collect())
 }
 
 // In the case where we know the base directory ID, we can insert files directly.
@@ -752,31 +638,60 @@ pub fn insert_files_rows(files_rows: &[NewFileOwned], connection: &mut SqliteCon
    Ok(())
 }
 
-/// Returns the UUID of the new base directory.
-pub fn insert_base_directory(base_dir: &str, connection: &mut SqliteConnection) -> anyhow::Result<Uuid>
+/// Returns the UUID of the new watched directory.
+pub fn insert_watched_directory(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<Uuid>
 {
-   use crate::schema::base_directories;
+   use crate::schema::watched_directories;
 
-   let base_dir_id = Uuid::new_v4();
-   let new_base_directory = crate::models::NewBaseDirectory {
-      id: &base_dir_id.to_string(),
-      path: base_dir,
+   let watched_directory_uuid = Uuid::new_v4();
+   let new_watched_directory = crate::models::NewWatchedDirectory {
+      id: &watched_directory_uuid.to_string(),
+      filepath: watched_directory,
    };
 
-   diesel::insert_into(base_directories::table)
-      .values(new_base_directory)
+   diesel::insert_into(watched_directories::table)
+      .values(new_watched_directory)
       .execute(connection)?;
 
-   Ok(base_dir_id)
+   Ok(watched_directory_uuid)
 }
 
-fn delete_base_directories(base_dirs: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+pub fn watched_dir_exists(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<bool>
 {
-   use crate::schema::base_directories;
+   use crate::schema::watched_directories;
 
-   let base_dir_id_strings = base_dirs.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+   let exists: bool = select(
+      exists(
+         watched_directories::table.filter(
+            watched_directories::filepath.eq(watched_directory))))
+      .get_result(connection)?;
 
-   diesel::delete(base_directories::table.filter(base_directories::id.eq_any(base_dir_id_strings)))
+   Ok(exists)
+}
+
+pub fn get_watched_directory_from_path(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<Option<Uuid>>
+{
+   use crate::schema::watched_directories;
+
+   let uuid: Option<String> = watched_directories::table
+      .select(watched_directories::id)
+      .filter(watched_directories::filepath.eq(watched_directory))
+      .first(connection)
+      .optional()?;
+
+   match uuid {
+      Some(uuid) => Ok(Some(Uuid::parse_str(&uuid)?)),
+      None => Ok(None)
+   }
+}
+
+fn delete_watched_directories(watched_directories_uuids: &[Uuid], connection: &mut SqliteConnection) -> anyhow::Result<()>
+{
+   use crate::schema::watched_directories;
+
+   let watched_directory_ids_str = watched_directories_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+
+   diesel::delete(watched_directories::table.filter(watched_directories::id.eq_any(watched_directory_ids_str)))
       .execute(connection)?;
 
    Ok(())
@@ -786,7 +701,9 @@ fn delete_files(file_ids: &[Uuid], connection: &mut SqliteConnection) -> anyhow:
 {
    use crate::schema::files;
 
-   diesel::delete(files::table.filter(files::id.eq_any(file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>())))
+   let id_strs = file_ids.iter().map(|uuid| uuid.to_string()).collect::<Vec<String>>();
+
+   diesel::delete(files::table.filter(files::id.eq_any(id_strs)))
       .execute(connection)?;
 
    Ok(())
@@ -820,11 +737,12 @@ pub fn delete_files_cascade(file_ids: &[Uuid], connection: &mut SqliteConnection
    Ok(())
 }
 
-pub fn delete_base_directory_cascade(base_dir_ids: &[Uuid], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
+pub fn delete_watched_directories_cascade(base_dir_ids: &[Uuid], connection: &mut SqliteConnection, app_handle: AppHandle) -> anyhow::Result<()>
 {
-   let file_ids = get_files_in_directories(base_dir_ids, connection)?;
+   // Note that since these IDs include those files in subdirectories, so we don't need to walk a tree.
+   let file_ids = get_files_in_watched_directories(base_dir_ids, connection)?;
    delete_files_cascade(&file_ids, connection, app_handle)?;
-   delete_base_directories(base_dir_ids, connection)?;
+   delete_watched_directories(base_dir_ids, connection)?;
 
    Ok(())
 }
@@ -865,7 +783,7 @@ mod tests
    use diesel::sqlite::Sqlite;
    use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
    
-   use crate::{models::NewFile, schema::{base_directories, files}};
+   use crate::{models::NewFile, schema::{watched_directories, files}};
    use super::*;
 
    // TODO As we are shipping this executable, we will want to actually embed migrations for the whole app,
@@ -899,43 +817,6 @@ mod tests
       Ok(connection)
    }
 
-   #[test]
-   fn test_get_filepath()
-   {
-      let mut connection = setup().unwrap();
-
-      let file_id = Uuid::new_v4();
-      let base_directory_id = Uuid::new_v4();
-      let relative_path = "test.jpg";
-      let base_directory = "D:\\test";
-
-      // Insert into the base directories table
-      let new_base_directory = crate::models::NewBaseDirectory {
-         id: &base_directory_id.to_string(),
-         path: base_directory,
-      };
-
-      diesel::insert_into(base_directories::table)
-         .values(new_base_directory)
-         .execute(&mut connection)
-         .expect("Error inserting base directory");
-
-      // Insert into the files table. Note this must be done second to avoid a FK constraint violation.
-      let new_file = NewFile {
-         id: &file_id.to_string(),
-         base_directory_id: &base_directory_id.to_string(),
-         relative_path
-      };
-
-      diesel::insert_into(files::table)
-         .values(new_file)
-         .execute(&mut connection)
-         .expect("Error inserting file");
-
-      // Get the file path using the query we're actually testing
-      let file_path = &get_filepaths(&[file_id], &mut connection).unwrap()[0].1;
-      let expected = PathBuf::from(base_directory).join(relative_path);
-      assert_eq!(*file_path, expected);
-   }
+   // TODO Test various queries.
 
 }

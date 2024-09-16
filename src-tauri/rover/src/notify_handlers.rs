@@ -12,6 +12,8 @@ use crate::{ann, error::Error, interface::Payload, queries, state::{ClipState, C
 pub struct FsEventHandler
 {
     pub app_handle: tauri::AppHandle,
+    pub watch_directory_id: Uuid,
+    pub watch_directory_path: PathBuf,
 }
 
 impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
@@ -261,7 +263,7 @@ impl FsEventHandler {
     {
         // Insert the files into the DB and get their new UUIDs.
         let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
-        let insert_result = queries::insert_files(&new_files, &mut connection);
+        let insert_result = queries::insert_files(&new_files, &mut connection, &Some(self.watch_directory_id));
         if let Err(e) = &insert_result {
             error!("Error inserting new files into DB: {:?}", e);
         }
@@ -303,37 +305,24 @@ impl FsEventHandler {
         to_path: &PathBuf,
     ) -> anyhow::Result<()>
     {
-        let from_base_dir = from_path.parent().ok_or(anyhow::anyhow!("No parent for path: {:?}", from_path))?;
-        let from_filename = from_path.file_name().ok_or(anyhow::anyhow!("No filename for path: {:?}", from_path))?;
-        let to_base_dir = to_path.parent().ok_or(anyhow::anyhow!("No parent for path: {:?}", to_path))?;
-        let to_filename = to_path.file_name().ok_or(anyhow::anyhow!("No filename for path: {:?}", to_path))?;
-
-        // TODO Consider using OS file system ids here.
-        // We expect the base dirs to match.
-        if from_base_dir != to_base_dir {
-            return Err(anyhow::anyhow!("Base dirs do not match for RenameMode::To event"));
-        }
+        // TODO Consider using OS file system ids here - they should match, I think.
 
         let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
 
-        let base_dir_id = queries::get_base_dir_id(
-            from_base_dir.to_str().ok_or(Error::PathBufToString)?,
+        let file_id = queries::get_file_id_from_filepath(
+            from_path.to_str().ok_or(Error::PathBufToString)?,
             &mut connection
         )?;
 
-        let base_dir_id = base_dir_id.ok_or(anyhow::anyhow!("Base dir ID not found"))?;
+        if file_id.is_none() {
+            error!("File ID not found for path: {:?}", from_path);
+            return Err(anyhow::anyhow!("File ID not found for path: {:?}", from_path));
+        }
+        let file_id = file_id.unwrap();
 
-        let file_id = queries::get_file_id_from_base_dir_and_relative_path(
-            &base_dir_id, 
-            from_filename.to_str().ok_or(Error::PathBufToString)?,
-            &mut connection
-        )?;
-
-        let file_id = file_id.ok_or(anyhow::anyhow!("File ID not found"))?;
-
-        queries::update_filename(
+        queries::update_filepath(
             &file_id, 
-            to_filename.to_str().ok_or(Error::PathBufToString)?,
+            to_path.to_str().ok_or(Error::PathBufToString)?,
             &mut connection
         )?;
 
@@ -383,25 +372,15 @@ impl FsEventHandler {
         // I could imagine needing to change this in the future, but I think it's enough of an edge
         // case (I expect most users will mostly dump + forget files) that it's fine for now.
 
-        let base_dir = path.parent().ok_or(anyhow::anyhow!("No parent for path: {:?}", path))?;
-        let filename = path.file_name().ok_or(anyhow::anyhow!("No filename for path: {:?}", path))?;
-        
         let mut connection = self.app_handle.state::<ConnectionPoolState>().get_connection().expect("Unable to get connection from pool");
-        let base_dir_id = queries::get_base_dir_id(
-            base_dir.to_str().ok_or(Error::PathBufToString)?,
+        
+        // Get the file ID from the DB by quering the filepath
+        let file_id = queries::get_file_id_from_filepath(
+            path.to_str().ok_or(Error::PathBufToString)?,
             &mut connection
         )?;
-
-        let base_dir_id = base_dir_id.ok_or(anyhow::anyhow!("Base dir ID not found"))?;
-
-        let file_id = queries::get_file_id_from_base_dir_and_relative_path(
-            &base_dir_id, 
-            filename.to_str().ok_or(Error::PathBufToString)?,
-            &mut connection
-        )?;
-
-
         let file_id = file_id.ok_or(anyhow::anyhow!("File ID not found"))?;
+        
         queries::delete_files_cascade(&[file_id], &mut connection, self.app_handle.clone())?;
 
         Ok(())

@@ -1,13 +1,6 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    base_directories (id) {
-        id -> Text,
-        path -> Text,
-    }
-}
-
-diesel::table! {
     failed_encodings (id) {
         id -> Text,
         error -> Text,
@@ -25,8 +18,8 @@ diesel::table! {
 diesel::table! {
     files (id) {
         id -> Text,
-        base_directory_id -> Text,
-        relative_path -> Text,
+        filepath -> Text,
+        watched_directory_id -> Nullable<Text>,
     }
 }
 
@@ -65,15 +58,21 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    watched_directories (id) {
+        id -> Text,
+        filepath -> Text,
+    }
+}
+
 diesel::joinable!(failed_encodings -> files (id));
 diesel::joinable!(file_tags -> files (file_id));
 diesel::joinable!(file_tags -> tags (tag_id));
-diesel::joinable!(files -> base_directories (base_directory_id));
+diesel::joinable!(files -> watched_directories (watched_directory_id));
 diesel::joinable!(image_features_vit_l_14_336_px -> files (id));
 diesel::joinable!(thumbnails -> files (file_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
-    base_directories,
     failed_encodings,
     file_tags,
     files,
@@ -81,4 +80,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     tag_edges,
     tags,
     thumbnails,
+    watched_directories,
 );

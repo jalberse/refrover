@@ -1,33 +1,12 @@
 use diesel::prelude::*;
-use diesel::sql_types::Integer; // Add this line
+use diesel::sql_types::Integer;
 use serde::Serialize;
 use time;
-
-use crate::schema::base_directories;
 
 #[derive(QueryableByName)]
 pub struct RowsAffected {
     #[sql_type = "Integer"]
     pub rows_affected: i32,
-}
-
-#[derive(Queryable, Selectable)]
-#[diesel(table_name = crate::schema::base_directories)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-#[derive(Serialize)]
-pub struct BaseDirectories {
-    pub id: String,
-    pub path: String,
-}
-
-// Note that for tables with auto-incrementing IDs, we do not
-// pass in the ID explicitly. This is part of the reason for having
-// separate structs for Insertable and Queryable models.
-#[derive(Insertable)]
-#[diesel(table_name = base_directories)]
-pub struct NewBaseDirectory<'a> {
-    pub id: &'a str,
-    pub path: &'a str,
 }
 
 #[derive(Queryable, Selectable)]
@@ -50,34 +29,47 @@ pub struct NewFileTag<'a> {
 #[diesel(table_name = crate::schema::files)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
-pub struct Files {
+pub struct File {
     pub id: String,
-    pub base_directory_id: String,
-    pub relative_path: String,
+    pub filepath: String,
+    pub watched_directory_id: Option<String>,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::files)]
 pub struct NewFile<'a> {
     pub id: &'a str,
-    pub base_directory_id: &'a str,
-    pub relative_path: &'a str,
+    pub filepath: &'a str,
+    pub watched_directory_id: Option<&'a str>,
 }
 
 #[derive(Insertable, Debug)]
 #[diesel(table_name = crate::schema::files)]
 pub struct NewFileOwned {
     pub id: String,
-    pub base_directory_id: String,
-    pub relative_path: String,
+    pub filepath: String,
+    pub watched_directory_id: Option<String>,
 }
 
-// TODO These don't match the new schema. Check this and all the other ones. They need the other new fields.
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::watched_directories)]
+pub struct WatchedDirectory {
+    pub id: String,
+    pub filepath: String,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::watched_directories)]
+pub struct NewWatchedDirectory<'a> {
+    pub id: &'a str,
+    pub filepath: &'a str,
+}
+
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::tag_edges)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]
-pub struct TagEdges {
+pub struct TagEdge {
     pub id: String,
     pub entry_edge_id: String,
     pub direct_edge_id: String,

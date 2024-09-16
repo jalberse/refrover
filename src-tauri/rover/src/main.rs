@@ -93,9 +93,6 @@ fn main() -> anyhow::Result<()> {
             }
 
             
-
-            
-
             // TODO We need a table that stores the watched directories.
             //      We need to populate the front-end with them,
             //      and create watchers for them.
@@ -105,10 +102,16 @@ fn main() -> anyhow::Result<()> {
             // scan them and add them to the HNSW index (and any other relevant tables).
             // Thumbnails we can ignore for now, generating them on the fly is OK.
             // We'll probably share a lot of code with that in the FS watcher.
+            // In fact, we might want to do it in an initial scan callback...? Maybe not.
 
             // TODO Remove this, just doing for now... Will need to replace with our watched directories thing.
             tauri::scope::FsScope::allow_directory(&app.fs_scope(), "D:\\refrover_photos", true)?;
 
+            // TODO We will instead make the FsWatcherState a Vec of watchers, each storing their path/id.
+            //      When we add/remove a watched directory, we add/remove a watcher.
+            //      We do this so that we know which watched directory events are coming from.
+            // https://docs.rs/notify/latest/notify/index.html#with-different-configurations
+            //      That's recommended by the docs, so I don't think there's a performance concern?
             let fs_event_handler = notify_handlers::FsEventHandler {
                 app_handle: app.handle().clone(),
             };
