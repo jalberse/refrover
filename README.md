@@ -4,6 +4,8 @@ It project is currently source-available, but not open source (though that's in 
 
 # ReferenceRover
 
+![](images/example-search.png)
+
 ReferenceRover is a tool for collecting, organizing, and viewing artistic reference materials.
 
 Features (and planned features) include:
