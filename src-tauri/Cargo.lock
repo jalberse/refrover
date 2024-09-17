@@ -133,6 +133,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "anyhow-tauri",
+ "approx",
  "bincode",
  "chrono",
  "cpu-time",
@@ -162,6 +163,15 @@ dependencies = [
  "thiserror",
  "time",
  "uuid",
+]
+
+[[package]]
+name = "approx"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -2922,6 +2932,7 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
 dependencies = [
+ "approx",
  "matrixmultiply",
  "num-complex",
  "num-integer",

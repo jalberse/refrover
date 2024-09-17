@@ -3,8 +3,8 @@ use std::path::Path;
 use diesel::{RunQueryDsl, SqliteConnection};
 use image::DynamicImage;
 use log::{info, trace, warn};
-use ndarray::{Array, Array2, ArrayView, Dim, IxDyn, Axis};
-use ort::{self, inputs, CPUExecutionProvider, GraphOptimizationLevel};
+use ndarray::{Array, Array2, Dim, IxDyn, Axis};
+use ort::{self, inputs, GraphOptimizationLevel};
 use ort::DirectMLExecutionProvider;
 use anyhow;
 
@@ -37,7 +37,7 @@ pub struct Clip
 {
     visual_session: ort::Session,
     text_session: ort::Session,
-    forward_session: ort::Session
+    logit_scale: f32,
 }
 
 impl Clip
@@ -80,14 +80,9 @@ impl Clip
             .with_execution_providers([DirectMLExecutionProvider::default().build()])?
             .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px_transformer.onnx"))?;
 
-        // TODO See ROVER-37.
-        let forward_session = ort::Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .with_intra_threads(4)?
-            .with_execution_providers([CPUExecutionProvider::default().build()])?
-            .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px.onnx"))?;
+        let logit_scale = f32::ln(1.0 / 0.01);
 
-        Ok( Clip { visual_session, text_session, forward_session } )
+        Ok( Clip { visual_session, text_session, logit_scale } )
     }
 
     /// Given a batch of images, returns the image features encoded by the vision portion of the CLIP model.
@@ -157,31 +152,26 @@ impl Clip
 
     /// Given a batch of images and a batch of text tokens, returns two Tensors,
     /// containing the logit scores corresponding to each image and text input.
-    /// The values are cosine similarities between the corresponding image and text features,
-    /// times 100.
     pub fn forward(&self, images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<i32>) -> anyhow::Result<ForwardResults>
     {
-        let outputs = self.forward_session.run(inputs![
-            images,
-            tokens
-        ]?)?;
+        let image_features = self.encode_image(images)?;
+        let text_features = self.encode_text(tokens)?;
+    
+        // Note that these are already normalized (this convention differs from CLIP)
 
-        let logits_per_image: ArrayView<f32, IxDyn> = outputs["LOGITS_PER_IMAGE"].try_extract_tensor::<f32>()?;
-        let logits_per_text: ArrayView<f32, IxDyn> = outputs["LOGITS_PER_TEXT"].try_extract_tensor::<f32>()?;
-
-        let logits_per_image = logits_per_image.to_owned();
-        let logits_per_text = logits_per_text.to_owned();
+        // cosine similarity as logits
+        let logit_scale = self.logit_scale.exp();
+        let logits_per_image = image_features.dot(&text_features.t()) * logit_scale;
+        let logits_per_text = logits_per_image.t().to_owned();
 
         Ok(
             ForwardResults{
-                logits_per_image,
-                logits_per_text,
+                logits_per_image: logits_per_image.into_dyn(),
+                logits_per_text: logits_per_text.into_dyn(),
             }
         )
     }
 
-    // TODO This is awkward to call, we do weird maps. Just take the UUID and query for the path.
-    /// Encodes the images with the given Uuids and paths and saves the feature vectors to the database.
     pub fn encode_image_files(&self, files: &[UUID], connection: &mut SqliteConnection) -> anyhow::Result<()>
     {
         use crate::schema::image_features_vit_l_14_336_px;
@@ -315,5 +305,72 @@ impl Clip
             }
             row /= norm;
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ndarray::ArrayView;
+    use approx;
+    use ort::CPUExecutionProvider;
+
+    use super::*;
+
+    fn forward_onnx(images: Array<f32, Dim<[usize; 4]>>, tokens: Array2<i32>) -> anyhow::Result<ForwardResults>
+    {
+        let forward_session = ort::Session::builder().unwrap()
+            .with_optimization_level(GraphOptimizationLevel::Level3).unwrap()
+            .with_intra_threads(4).unwrap()
+            .with_execution_providers([CPUExecutionProvider::default().build()]).unwrap()
+            .commit_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("models").join("ViT-L_14_336px.onnx")).unwrap();
+
+        let outputs = forward_session.run(inputs![
+            images,
+            tokens
+        ]?)?;
+
+        let logits_per_image: ArrayView<f32, IxDyn> = outputs["LOGITS_PER_IMAGE"].try_extract_tensor::<f32>()?;
+        let logits_per_text: ArrayView<f32, IxDyn> = outputs["LOGITS_PER_TEXT"].try_extract_tensor::<f32>()?;
+        let logits_per_image = logits_per_image.to_owned();
+        let logits_per_text = logits_per_text.to_owned();
+        Ok(
+            ForwardResults{
+                logits_per_image,
+                logits_per_text,
+            }
+        )
+    }
+
+    #[test]
+    fn forward_equivalence()
+    {
+        let clip = Clip::new().unwrap();
+
+        let texts = vec![
+            "A photo of a duck",
+            "A photo of a cat.",
+        ];
+
+        let tokenizer = instant_clip_tokenizer::Tokenizer::new();
+
+        let tokens = preprocessing::tokenize_batch(texts, &tokenizer);
+
+        let images = preprocessing::load_image_batch(&[
+            (uuid::Uuid::new_v4().into(), Path::new(env!("CARGO_MANIFEST_DIR")).join("test_images").join("duck.jpg")),
+            (uuid::Uuid::new_v4().into(), Path::new(env!("CARGO_MANIFEST_DIR")).join("test_images").join("benji.jpg")),
+            ]);
+
+        // Unwrap the images
+        let images: Vec<(UUID, Box<DynamicImage>)> = images.into_iter().map(|(uuid, img)| (uuid, img.unwrap())).collect();
+
+        let resized_images = preprocessing::resize_images(images);
+
+        let image_clip_input = preprocessing::image_to_clip_format(resized_images);
+
+        let expected_forward_results = forward_onnx(image_clip_input.clone(), tokens.clone()).unwrap();
+        let actual_forward_results = clip.forward(image_clip_input, tokens).unwrap();
+
+        assert!(approx::relative_eq!(expected_forward_results.logits_per_image, actual_forward_results.logits_per_image, epsilon = 0.0001));
+        assert!(approx::relative_eq!(expected_forward_results.logits_per_text, actual_forward_results.logits_per_text, epsilon = 0.0001));
     }
 }

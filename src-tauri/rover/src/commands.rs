@@ -191,6 +191,8 @@ pub async fn add_watched_directory(
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
+    // TODO Search doesn't seem to be invoked while this is running. Why? Shouldn't they launch as separate async tasks/threads?
+
     // TODO - consider - we don't want to allow a new watched dir that is a subdirectory of an existing watched dir, OR a parent of an existing watched dir.
     //      That (as well as checking if it already exists and perhaps exists on the filesystem) should be in some validate_new_watched_dir command or something,
     //      which would be non-async.
