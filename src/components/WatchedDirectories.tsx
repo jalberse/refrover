@@ -5,6 +5,8 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { addWatchedDirectory, deleteWatchedDirectory } from "../api"
 import WatchedDirectoriesList from "./WatchedDirectoriesList"
+import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
+
 
 import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
 import { RichTreeView } from "@mui/x-tree-view"
@@ -71,8 +73,16 @@ const WatchedDirectories: React.FC = () => {
   //      (actually don't do that, but I think we *do* want a default directory. I think we'd handle that in the backend, though
   //       and we'd get that on mount from the DB from the above TODO)
 
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState("");
+  // Used in the dialog to show which directories were excluded
+  const [excludedDirectories, setExcludedDirectories] = useState<string[]>([]);
   const [directoryTrees, setDirectoryTrees] = useState<DirectoryTreeItem[]>([]);
   const prevDirectoryTreesRef = useRef<DirectoryTreeItem[]>([]);
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+  };
 
   const addDirectory = async () => {
     let selectedPath = await open({
@@ -89,6 +99,8 @@ const WatchedDirectories: React.FC = () => {
 
       const numberOfSelectedDirectories = selectedPath.length;
 
+      const originalSelectedPath = selectedPath;
+
       // If any of the paths are already in the list, don't add them again
       selectedPath = selectedPath.filter((path) => !directoryTrees.some((dir) => dir.id === path))
 
@@ -98,10 +110,12 @@ const WatchedDirectories: React.FC = () => {
       // Similarly, if any of the paths to add are parents of directories in the list, don't add them
       selectedPath = selectedPath.filter((path) => !directoryTrees.some((dir) => dir.id.startsWith(path)))
 
-      // If we've filtered out any paths, we want to let the user know via a pop-up
+      // If we've filtered out any paths, we want to let the user know via a modal dialog
       if (selectedPath.length < numberOfSelectedDirectories) {
-        // TODO Show a pop-up
-        console.log("Some directories were already added or are subdirectories of directories already added.")
+        const excludedDirectories = originalSelectedPath.filter((path) => selectedPath && !selectedPath.includes(path));
+        setDialogMessage(`Directories cannot be added if they are a subdirectory or parent of an existing watched directory. The following directories were not added:`);
+        setExcludedDirectories(excludedDirectories);
+        setDialogOpen(true);
       }
 
       const newDirectories = await Promise.all(selectedPath.map((path) => {
@@ -170,6 +184,33 @@ const WatchedDirectories: React.FC = () => {
         // removeDirectory={removeDirectory}
         // />
       }
+      <Dialog
+        open={dialogOpen}
+        onClose={handleCloseDialog}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">{"Warning"}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            {dialogMessage}
+          </DialogContentText>
+            <ul>
+            {excludedDirectories.map((directory) => (
+              <li key={directory}>
+              <DialogContentText>
+                {directory}
+              </DialogContentText>
+              </li>
+            ))}
+            </ul>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} color="primary" autoFocus>
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   )
 }
