@@ -6,8 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { addWatchedDirectory, deleteWatchedDirectory } from "../api"
 import WatchedDirectoriesList from "./WatchedDirectoriesList"
 
-import * as fs from 'fs';
-import * as path from 'path';
+import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
 import { RichTreeView } from "@mui/x-tree-view"
 
 
@@ -20,53 +19,49 @@ export type Directory = {
 type DirectoryTreeItem = {
   // TODO Perhaps generate IDs instead; we do string comparisons, but I'm not about to optimize for that yet.
   // The full path of the directory. Can be used as a unique ID.
-  path: string;
-  // TODO - potentially delete, and just call path.basename(path) where necessary?
+  id: string;
   // The label to display in the hierarchy
   label: string;
   children?: DirectoryTreeItem[];
 };
 
-function getDirectoryTrees(directories: string[]): DirectoryTreeItem[] {
+async function buildTree(dir: string): Promise<DirectoryTreeItem | null> {
+  // Dynamically import due to restrictions with Next.js SSR + Tauri.
+  // (We don't use SSR, but we still have to use dynamic imports to avoid the error.)
+  const basename = (await import ('@tauri-apps/api/path')).basename;
+
+  try {
+    const entries = await readDir(dir, { dir: BaseDirectory.App });
+    const children = await Promise.all(entries.map(async (entry) => {
+      if (entry.children) {
+        return await buildTree(entry.path);
+      }
+      return null;
+    }));
+
+    return {
+      id: dir,
+      label: await basename(dir),
+      children: children.filter((child) => child !== null) as DirectoryTreeItem[],
+    };
+  } catch (error) {
+    console.error(`Error reading directory ${dir}:`, error);
+    return null;
+  }
+}
+
+// TODO We'll use this for the initial population
+async function getDirectoryTrees(directories: string[]): Promise<DirectoryTreeItem[]> {
   const tree: DirectoryTreeItem[] = [];
 
-  directories.forEach((dir) => {
-    const dirTree = buildTree(dir);
+  for (const dir of directories) {
+    const dirTree = await buildTree(dir);
     if (dirTree) {
       tree.push(dirTree);
     }
-  });
-
-  return tree;
-}
-
-function buildTree(dirPath: string): DirectoryTreeItem | null {
-  const stats = fs.statSync(dirPath);
-  if (!stats.isDirectory()) {
-    return null;
   }
 
-  const dirName = path.basename(dirPath);
-  const treeItem: DirectoryTreeItem = {
-    path: dirPath,
-    label: dirName,
-    children: [],
-  };
-
-  const items = fs.readdirSync(dirPath);
-  items.forEach((item) => {
-    const itemPath = path.join(dirPath, item);
-    const itemStats = fs.statSync(itemPath);
-
-    if (itemStats.isDirectory()) {
-      const childTree = buildTree(itemPath);
-      if (childTree) {
-        treeItem.children?.push(childTree);
-      }
-    }
-  });
-
-  return treeItem;
+  return tree;
 }
 
 const WatchedDirectories: React.FC = () => {
@@ -78,19 +73,6 @@ const WatchedDirectories: React.FC = () => {
 
   const [directoryTrees, setDirectoryTrees] = useState<DirectoryTreeItem[]>([]);
   const prevDirectoryTreesRef = useRef<DirectoryTreeItem[]>([]);
-
-  // TODO We'll have DirectoryTreeItem[] in the state.
-  //      We'll then use that to render the trees in the WatchedDirectoriesList component, modifying it to be like TagHierarchy to display those.
-  //      On mount, we should fetch the directories from the backend and then build the tree from that.
-  //      We can also update via the fs dialog to add a new watched directory.
-  //      Finally, we'll also send an event from the fs watcher on the backend so that if a directory is added or removed within a watched directory,
-  //          we can update the tree accordingly. We can probably just rebuild the whole thing, at least at first (we can surely send hints in the event though,
-  //          just the path is good since we can jump to that location and insert it, I guess)
-  // Once we have that, we can add directories to search by constructing the prefix search query from the tree and filtering the search results accordingly (URL query params).
-  //      Buttons to add/remove dirs from search etc.
-  //      SQL LIKE queries for prefix search make this simple.
-  //      This is all far easier than explicitly tracking subdirs in the database, I think.
-  // https://vizlib-io.atlassian.net/browse/ROVER-84
 
   const addDirectory = async () => {
     let selectedPath = await open({
@@ -104,19 +86,38 @@ const WatchedDirectories: React.FC = () => {
       selectedPath = [selectedPath]
     }
     if (selectedPath && Array.isArray(selectedPath)) {
-      const newDirectories = selectedPath.map((path) => {
-        // Call buildTree() to get the DirectoryTreeItem
+
+      const numberOfSelectedDirectories = selectedPath.length;
+
+      // If any of the paths are already in the list, don't add them again
+      selectedPath = selectedPath.filter((path) => !directoryTrees.some((dir) => dir.id === path))
+
+      // If any of the paths are already *subdirectories* of a directory in the list, don't add them
+      selectedPath = selectedPath.filter((path) => !directoryTrees.some((dir) => path.startsWith(dir.id)))
+
+      // Similarly, if any of the paths to add are parents of directories in the list, don't add them
+      selectedPath = selectedPath.filter((path) => !directoryTrees.some((dir) => dir.id.startsWith(path)))
+
+      // If we've filtered out any paths, we want to let the user know via a pop-up
+      if (selectedPath.length < numberOfSelectedDirectories) {
+        // TODO Show a pop-up
+        console.log("Some directories were already added or are subdirectories of directories already added.")
+      }
+
+      const newDirectories = await Promise.all(selectedPath.map((path) => {
         const tree = buildTree(path);
         return tree;
-      })
-      .filter((dir) => dir !== null)
+      })).catch((error: unknown) => {
+        console.error("Error adding directory:", error);
+        return [];
+      }).then((trees) => trees.filter((tree) => tree !== null) as DirectoryTreeItem[]);
       setDirectoryTrees([...directoryTrees, ...newDirectories])
     }
   }
 
   const removeDirectory = (path: string) => {
     const newDirectories = directoryTrees.filter(
-      (directory) => directory.path !== path,
+      (directory) => directory.id !== path,
     )
     setDirectoryTrees(newDirectories)
   }
@@ -125,19 +126,19 @@ const WatchedDirectories: React.FC = () => {
     const prevDirectories = prevDirectoryTreesRef.current
 
     const addedDirectories = directoryTrees.filter(
-      (dir) => !prevDirectories.some((prevDir) => prevDir.path === dir.path),
+      (dir) => !prevDirectories.some((prevDir) => prevDir.id === dir.id),
     )
 
     const removedDirectories = prevDirectories.filter(
-      (prevDir) => !directoryTrees.some((dir) => dir.path === prevDir.path),
+      (prevDir) => !directoryTrees.some((dir) => dir.id === prevDir.id),
     )
 
     const addPromises = addedDirectories.map((dir) =>
-      addWatchedDirectory(dir.path),
+      addWatchedDirectory(dir.id),
     )
 
     const removePromises = removedDirectories.map((dir) =>
-      deleteWatchedDirectory(dir.path),
+      deleteWatchedDirectory(dir.id),
     )
 
     Promise.all([...addPromises, ...removePromises])
