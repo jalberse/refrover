@@ -5,7 +5,7 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { addWatchedDirectory, deleteWatchedDirectory, getWatchedDirectories } from "../api"
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
-
+import { Menu, MenuItem } from '@mui/material';
 
 import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
 import { RichTreeView } from "@mui/x-tree-view"
@@ -72,6 +72,8 @@ const WatchedDirectories: React.FC = () => {
 
   const [directoryTrees, setDirectoryTrees] = useState<DirectoryTreeItem[]>([]);
   const prevDirectoryTreesRef = useRef<DirectoryTreeItem[]>([]);
+
+  const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number; itemId: string } | null>(null);
 
   const [selectedDirectories, setSelectedDirectories] = useState<string[]>([]);
 
@@ -174,26 +176,50 @@ const WatchedDirectories: React.FC = () => {
        })
   }, [directoryTrees])
 
-  // TODO Use multi-checkbox-selection.
-  // https://mui.com/x/react-tree-view/rich-tree-view/selection/
-  // We can replace the icon with a magnifying class and a "checked magnifying glass".
-  // If we just ahve that + multi-selection, that's totally sufficient and makes sense UX wise I think.
-  // We can then quite easily get the paths from the selected items and pass into a zustand store,
-  // and quite simply filter search results with that, almost trivially.
-  // But I almost want 2 contexts for selection: 1 for e.g. deletion (and in the future maybe dragging and dropping),
-  //  and 1 for search.
-  // But for now, just have them both in the same context and that'll be fine.
-  // In the future, we could have custom items that allow selection (probably not via checkbox, but multi-select) and a magnifying glass toggle for search.
+  // TODO We want a right-click-context menu when clicking on tree items.
+  //      If it's a top-level one, there should be a "delete" option to stop watching the directory.
+  //      I tried implementing with MUI's menu, but it's not working as expected - we have some default
+  //      menu from tauri, and the right click event is not firing.
+  // https://github.com/c2r0b/tauri-plugin-context-menu
+  //      That plugin might be useful?
+  // This: https://tauri.app/v1/guides/features/menu is NOT what we want (that's top-bar window menus).
+  // Well, first, let's see:
+  // https://github.com/tauri-apps/wry/issues/30
+  // Looks like we can disable the default context menu, which seems to be interfering with our logic here...?
+  // document.addEventListener('contextmenu', event => event.preventDefault());
+  // Hmm, well that stopped the default context menu, but our event listener still isn't firing.
+  //   Maybe just go for the plugin and get rid of the mui attempt...
 
-  // TODO So to get the items for search
-  // onSelectedItemsChange()
-  // https://mui.com/x/api/tree-view/rich-tree-view/#props
-  // That callback will give us the selected items to update a store.
+  // TODO In the right click context menu, we want to have an option to open the directory in the file explorer.
+  // For opening the file explorer, we probably want to use the shell:
+  //   https://tauri.app/v1/api/js/shell/
+
 
   const onSelectedItemsChange = (event: React.SyntheticEvent, itemIds: string[]) => {
     // TODO I think we may want to use a zustand store instead of this local state here, but I'm testing this out for now.
     setSelectedDirectories(itemIds);
   }
+
+  const handleContextMenu = (event: React.MouseEvent, itemId: string) => {
+    event.preventDefault();
+    setContextMenu(
+      contextMenu === null
+        ? { mouseX: event.clientX - 2, mouseY: event.clientY - 4, itemId }
+        : null,
+    );
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  const handleItemClick = (event: React.MouseEvent, itemId: string) => {
+    console.log("Item clicked:", itemId);
+    console.log("Event:", event);
+    if (event.type === 'contextmenu') {
+      handleContextMenu(event, itemId);
+    }
+  };
 
   return (
     <div>
@@ -214,7 +240,20 @@ const WatchedDirectories: React.FC = () => {
         checkboxSelection={true}
         multiSelect
         onSelectedItemsChange={onSelectedItemsChange}
+        onItemClick={handleItemClick}
       />
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleCloseContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+      >
+        <MenuItem >Test</MenuItem>
+      </Menu>
       {
         // <WatchedDirectoriesList
         // directories={directories}
