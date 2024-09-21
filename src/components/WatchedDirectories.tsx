@@ -185,7 +185,7 @@ const WatchedDirectories: React.FC = () => {
       >
         Add Directory
       </button>
-      <RichTreeView items={directoryTrees} />
+      <RichTreeView items={directoryTrees} expansionTrigger="iconContainer" />
       {
         // <WatchedDirectoriesList
         // directories={directories}
