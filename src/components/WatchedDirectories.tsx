@@ -66,12 +66,6 @@ async function getDirectoryTrees(directories: string[]): Promise<DirectoryTreeIt
 }
 
 const WatchedDirectories: React.FC = () => {
-  // TODO We need to fetch the initial set of watched directories from the backend
-  //      That will use getDirectoryTrees(), and should be in a useEffect() on mount (ie with empty dependency list)
-  // TODO Note we may add directories if we e.g. drag files from file explorer in (we'd add its parent)
-  //      (actually don't do that, but I think we *do* want a default directory. I think we'd handle that in the backend, though
-  //       and we'd get that on mount from the DB from the above TODO)
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMessage, setDialogMessage] = useState("");
   // Used in the dialog to show which directories were excluded
