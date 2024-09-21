@@ -3,7 +3,7 @@
 import { open } from "@tauri-apps/api/dialog"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
-import { addWatchedDirectory, deleteWatchedDirectory } from "../api"
+import { addWatchedDirectory, deleteWatchedDirectory, getWatchedDirectories } from "../api"
 import WatchedDirectoriesList from "./WatchedDirectoriesList"
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
 
@@ -52,7 +52,6 @@ async function buildTree(dir: string): Promise<DirectoryTreeItem | null> {
   }
 }
 
-// TODO We'll use this for the initial population
 async function getDirectoryTrees(directories: string[]): Promise<DirectoryTreeItem[]> {
   const tree: DirectoryTreeItem[] = [];
 
@@ -79,6 +78,21 @@ const WatchedDirectories: React.FC = () => {
   const [excludedDirectories, setExcludedDirectories] = useState<string[]>([]);
   const [directoryTrees, setDirectoryTrees] = useState<DirectoryTreeItem[]>([]);
   const prevDirectoryTreesRef = useRef<DirectoryTreeItem[]>([]);
+
+  // On mount, get the initial set of watched directories from the database
+  // Populate directoryTrees with the initial set of watched directories
+  useEffect(() => {
+    getWatchedDirectories().then((directories) => {
+      getDirectoryTrees(directories).then((trees) => {
+        setDirectoryTrees(trees);
+        prevDirectoryTreesRef.current = trees
+      }).catch((error: unknown) => {
+        console.error("Error building directory trees:", error);
+      })
+    }).catch((error: unknown) => {
+      console.error("Error fetching watched directories:", error);
+    })
+  }, [])
 
   const handleCloseDialog = () => {
     setDialogOpen(false);

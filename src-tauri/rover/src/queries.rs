@@ -631,6 +631,17 @@ pub fn insert_files_rows(files_rows: &[NewFile], connection: &mut SqliteConnecti
    Ok(())
 }
 
+pub fn get_watched_directories(connection: &mut SqliteConnection) -> anyhow::Result<Vec<(UUID, String)>>
+{
+   use crate::schema::watched_directories;
+
+   let watched_directories: Vec<(UUID, String)> = watched_directories::table
+      .select((watched_directories::id, watched_directories::filepath))
+      .load(connection)?;
+
+   Ok(watched_directories)
+}
+
 /// Returns the UUID of the new watched directory.
 pub fn insert_watched_directory(watched_directory: &str, connection: &mut SqliteConnection) -> anyhow::Result<UUID>
 {

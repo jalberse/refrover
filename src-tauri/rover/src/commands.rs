@@ -304,6 +304,17 @@ pub async fn add_watched_directory(
     Ok(())
 }
 
+#[tauri::command]
+pub fn get_watched_directories(
+    pool_state: tauri::State<'_, ConnectionPoolState>
+) -> TAResult<Vec<String>>
+{
+    let mut connection = pool_state.get_connection().into_ta_result()?;
+    let watched_dirs = queries::get_watched_directories(&mut connection).into_ta_result()?;
+    let watched_dirs = watched_dirs.into_iter().map(|x| x.1).collect();
+    Ok(watched_dirs)
+}
+
 /// Deletes a watched directory and all its contents from the database.
 #[tauri::command]
 pub async fn delete_watched_directory(

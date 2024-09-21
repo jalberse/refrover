@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/tauri"
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import type FileMetadata from "./interfaces/FileMetadata"
 import type FileUuid from "./interfaces/FileUuid"
-import type Thumbnail from "./interfaces/Thumbnail"
+import type Thumbnail from "./interfaces/thumbnail"
 
 // TODO Ensure we're using proper interfaces for e.g. File UUIDs.
 //      I'm in a bad habit of using strings for everything on the frontend.
@@ -103,4 +103,8 @@ export async function deleteWatchedDirectory(directory: string) {
   } catch (error) {
     console.error("Error removing watched directory:", error)
   }
+}
+
+export function getWatchedDirectories() {
+  return invoke<string[]>("get_watched_directories")
 }

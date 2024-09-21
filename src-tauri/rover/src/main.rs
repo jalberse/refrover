@@ -132,6 +132,7 @@ fn main() -> anyhow::Result<()> {
             app::commands::fetch_metadata,
             app::commands::add_watched_directory,
             app::commands::delete_watched_directory,
+            app::commands::get_watched_directories,
             ])
         .run(tauri::generate_context!())?;
 
