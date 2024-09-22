@@ -7,6 +7,8 @@ import { addWatchedDirectory, deleteWatchedDirectory, getWatchedDirectories } fr
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
 
 import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
+import { RichTreeView } from "@mui/x-tree-view"
+
 
 export type Directory = {
   id: number
@@ -171,15 +173,33 @@ const WatchedDirectories: React.FC = () => {
        })
   }, [directoryTrees])
 
-  // hmm, https://www.npmjs.com/package/react-arborist
-  // react-arborist seems nice and definitely has onContextMenu. Maybe just go with that.
-  //    Note that *what* context menu is still up in the air. Could do the tauri plugin, or use MUI's Menu.
+  // TODO We want a right-click-context menu when clicking on tree items.
+  //      If it's a top-level one, there should be a "delete" option to stop watching the directory.
+  //      I tried implementing with MUI's menu, but it's not working as expected - we have some default
+  //      menu from tauri, and the right click event is not firing.
+  // https://github.com/c2r0b/tauri-plugin-context-menu
+  //      That plugin might be useful?
+  // This: https://tauri.app/v1/guides/features/menu is NOT what we want (that's top-bar window menus).
+  // Well, first, let's see:
+  // https://github.com/tauri-apps/wry/issues/30
+  // Looks like we can disable the default context menu, which seems to be interfering with our logic here...?
+  // document.addEventListener('contextmenu', event => event.preventDefault());
+  // Hmm, well that stopped the default context menu, but our event listener still isn't firing.
+  //   Maybe just go for the plugin and get rid of the mui attempt...
+  // Or if we commit to a custom tree view item, we can just add an onContextMenu prop to it trivially.
+  // Hmm, try this:
+  // https://stackoverflow.com/questions/69481071/material-ui-how-to-pass-custom-props-to-a-custom-treeitem
+  // Because essentially all we want is to pass a prop (the onContextMenu handler) to the tree item.
+  // This seems to tell you how to accomplish that...
+  //    nope, that's not RichTreeView, it's the old tree view.
+  // IF that doesn't work, we could also just tree a different tree component library.
+  // ughhh well, we can try a full custom RichTreeView item. Just be thorough.
 
   // TODO In the right click context menu, we want to have an option to open the directory in the file explorer.
   // For opening the file explorer, we probably want to use the shell:
   //   https://tauri.app/v1/api/js/shell/
 
-  // TODO This may need to change according to react-arborist's API.
+
   const onSelectedItemsChange = (event: React.SyntheticEvent, itemIds: string[]) => {
     // TODO I think we may want to use a zustand store instead of this local state here, but I'm testing this out for now.
     setSelectedDirectories(itemIds);
@@ -199,6 +219,13 @@ const WatchedDirectories: React.FC = () => {
       >
         Add Directory
       </button>
+      <RichTreeView
+        items={directoryTrees}
+        expansionTrigger="iconContainer"
+        checkboxSelection={true}
+        multiSelect
+        onSelectedItemsChange={onSelectedItemsChange}
+      />
       <Dialog
         open={dialogOpen}
         onClose={handleCloseDialog}

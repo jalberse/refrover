@@ -37,6 +37,7 @@ export const Home: React.FC = () => {
 
   // TODO We'll have a tags component/panel below the Watched Directories panel.
 
+
   return (
     <div className="flex flex-col bg-white">
       <Head>
