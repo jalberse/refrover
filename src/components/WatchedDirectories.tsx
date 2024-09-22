@@ -12,7 +12,6 @@ import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
 
 import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
-import Avatar from '@mui/material/Avatar';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import { UseTreeItem2Parameters } from '@mui/x-tree-view/useTreeItem2';
 import {
@@ -27,12 +26,10 @@ import { TreeItem2Icon } from '@mui/x-tree-view/TreeItem2Icon';
 import { TreeItem2Provider } from '@mui/x-tree-view/TreeItem2Provider';
 import { useTreeItem2 } from "@mui/x-tree-view/useTreeItem2"
 
-
 export type Directory = {
   id: number
   path: string
 }
-
 
 type DirectoryTreeItem = {
   // TODO Perhaps generate IDs instead; we do string comparisons, but I'm not about to optimize for that yet.
@@ -191,27 +188,11 @@ const WatchedDirectories: React.FC = () => {
        })
   }, [directoryTrees])
 
-  // TODO We want a right-click-context menu when clicking on tree items.
-  //      If it's a top-level one, there should be a "delete" option to stop watching the directory.
-  //      I tried implementing with MUI's menu, but it's not working as expected - we have some default
-  //      menu from tauri, and the right click event is not firing.
-  // https://github.com/c2r0b/tauri-plugin-context-menu
-  //      That plugin might be useful?
-  // This: https://tauri.app/v1/guides/features/menu is NOT what we want (that's top-bar window menus).
-  // Well, first, let's see:
-  // https://github.com/tauri-apps/wry/issues/30
-  // Looks like we can disable the default context menu, which seems to be interfering with our logic here...?
-  // document.addEventListener('contextmenu', event => event.preventDefault());
-  // Hmm, well that stopped the default context menu, but our event listener still isn't firing.
-  //   Maybe just go for the plugin and get rid of the mui attempt...
-  // Or if we commit to a custom tree view item, we can just add an onContextMenu prop to it trivially.
-  // Hmm, try this:
-  // https://stackoverflow.com/questions/69481071/material-ui-how-to-pass-custom-props-to-a-custom-treeitem
-  // Because essentially all we want is to pass a prop (the onContextMenu handler) to the tree item.
-  // This seems to tell you how to accomplish that...
-  //    nope, that's not RichTreeView, it's the old tree view.
-  // IF that doesn't work, we could also just tree a different tree component library.
-  // ughhh well, we can try a full custom RichTreeView item. Just be thorough.
+  // TODO Yay, we have custom tree items now!
+  //      That means that we should be able to pass an onContextMenu handler to them,
+  //      so that we can contextually update a mui context Menu based on the node.
+  //      The need for a custom item component was to allow us to have an equivalent to onItemClick
+  //      that is onItemContextMenu or something like that, to handle right-clicks and to be aware of the item.
 
   // TODO In the right click context menu, we want to have an option to open the directory in the file explorer.
   // For opening the file explorer, we probably want to use the shell:
@@ -245,6 +226,14 @@ const WatchedDirectories: React.FC = () => {
         onSelectedItemsChange={onSelectedItemsChange}
         slots={{ item: CustomTreeItem }}
       />
+      {
+        // Just print the selected directories for now
+        selectedDirectories.map((directory) => (
+          <div key={directory}>
+            {directory}
+          </div>
+        ))
+      }
       <Dialog
         open={dialogOpen}
         onClose={handleCloseDialog}
@@ -312,16 +301,6 @@ const CustomTreeItem = forwardRef((
             <TreeItem2Icon status={status} />
           </TreeItem2IconContainer>
           <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
-            <Avatar
-              sx={(theme) => ({
-                background: theme.palette.primary.main,
-                width: 24,
-                height: 24,
-                fontSize: '0.8rem',
-              })}
-            >
-              {(label as string)[0]}
-            </Avatar>
             <TreeItem2Checkbox {...getCheckboxProps()} />
             <TreeItem2Label {...getLabelProps()} />
           </Box>
