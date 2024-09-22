@@ -5,7 +5,6 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { addWatchedDirectory, deleteWatchedDirectory, getWatchedDirectories } from "../api"
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
-import { Menu, MenuItem } from '@mui/material';
 
 import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
 import { RichTreeView } from "@mui/x-tree-view"
@@ -73,8 +72,6 @@ const WatchedDirectories: React.FC = () => {
   const [directoryTrees, setDirectoryTrees] = useState<DirectoryTreeItem[]>([]);
   const prevDirectoryTreesRef = useRef<DirectoryTreeItem[]>([]);
 
-  const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number; itemId: string } | null>(null);
-
   const [selectedDirectories, setSelectedDirectories] = useState<string[]>([]);
 
   // On mount, get the initial set of watched directories from the database
@@ -141,12 +138,12 @@ const WatchedDirectories: React.FC = () => {
     }
   }
 
-  const removeDirectory = (path: string) => {
-    const newDirectories = directoryTrees.filter(
-      (directory) => directory.id !== path,
-    )
-    setDirectoryTrees(newDirectories)
-  }
+  // const removeDirectory = (path: string) => {
+  //   const newDirectories = directoryTrees.filter(
+  //     (directory) => directory.id !== path,
+  //   )
+  //   setDirectoryTrees(newDirectories)
+  // }
 
   useEffect(() => {
     const prevDirectories = prevDirectoryTreesRef.current
@@ -189,6 +186,7 @@ const WatchedDirectories: React.FC = () => {
   // document.addEventListener('contextmenu', event => event.preventDefault());
   // Hmm, well that stopped the default context menu, but our event listener still isn't firing.
   //   Maybe just go for the plugin and get rid of the mui attempt...
+  // Or if we commit to a custom tree view item, we can just add an onContextMenu prop to it trivially.
 
   // TODO In the right click context menu, we want to have an option to open the directory in the file explorer.
   // For opening the file explorer, we probably want to use the shell:
@@ -198,28 +196,8 @@ const WatchedDirectories: React.FC = () => {
   const onSelectedItemsChange = (event: React.SyntheticEvent, itemIds: string[]) => {
     // TODO I think we may want to use a zustand store instead of this local state here, but I'm testing this out for now.
     setSelectedDirectories(itemIds);
+    console.log(selectedDirectories);
   }
-
-  const handleContextMenu = (event: React.MouseEvent, itemId: string) => {
-    event.preventDefault();
-    setContextMenu(
-      contextMenu === null
-        ? { mouseX: event.clientX - 2, mouseY: event.clientY - 4, itemId }
-        : null,
-    );
-  };
-
-  const handleCloseContextMenu = () => {
-    setContextMenu(null);
-  };
-
-  const handleItemClick = (event: React.MouseEvent, itemId: string) => {
-    console.log("Item clicked:", itemId);
-    console.log("Event:", event);
-    if (event.type === 'contextmenu') {
-      handleContextMenu(event, itemId);
-    }
-  };
 
   return (
     <div>
@@ -240,20 +218,7 @@ const WatchedDirectories: React.FC = () => {
         checkboxSelection={true}
         multiSelect
         onSelectedItemsChange={onSelectedItemsChange}
-        onItemClick={handleItemClick}
       />
-      <Menu
-        open={contextMenu !== null}
-        onClose={handleCloseContextMenu}
-        anchorReference="anchorPosition"
-        anchorPosition={
-          contextMenu !== null
-            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
-            : undefined
-        }
-      >
-        <MenuItem >Test</MenuItem>
-      </Menu>
       {
         // <WatchedDirectoriesList
         // directories={directories}
