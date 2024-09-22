@@ -1,13 +1,31 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
 
 import { open } from "@tauri-apps/api/dialog"
-import React from "react"
+import React, { forwardRef } from "react"
 import { useEffect, useRef, useState } from "react"
 import { addWatchedDirectory, deleteWatchedDirectory, getWatchedDirectories } from "../api"
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
 
 import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
-import { RichTreeView } from "@mui/x-tree-view"
+
+import { styled } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Avatar from '@mui/material/Avatar';
+import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
+import { UseTreeItem2Parameters } from '@mui/x-tree-view/useTreeItem2';
+import {
+  TreeItem2Content,
+  TreeItem2IconContainer,
+  TreeItem2GroupTransition,
+  TreeItem2Label,
+  TreeItem2Root,
+  TreeItem2Checkbox,
+} from '@mui/x-tree-view/TreeItem2';
+import { TreeItem2Icon } from '@mui/x-tree-view/TreeItem2Icon';
+import { TreeItem2Provider } from '@mui/x-tree-view/TreeItem2Provider';
+import { useTreeItem2 } from "@mui/x-tree-view/useTreeItem2"
 
 
 export type Directory = {
@@ -42,7 +60,7 @@ async function buildTree(dir: string): Promise<DirectoryTreeItem | null> {
     return {
       id: dir,
       label: await basename(dir),
-      children: children.filter((child) => child !== null) as DirectoryTreeItem[],
+      children: children.filter((child) => child !== null),
     };
   } catch (error) {
     console.error(`Error reading directory ${dir}:`, error);
@@ -225,6 +243,7 @@ const WatchedDirectories: React.FC = () => {
         checkboxSelection={true}
         multiSelect
         onSelectedItemsChange={onSelectedItemsChange}
+        slots={{ item: CustomTreeItem }}
       />
       <Dialog
         open={dialogOpen}
@@ -256,5 +275,61 @@ const WatchedDirectories: React.FC = () => {
     </div>
   )
 }
+
+const CustomTreeItemContent = styled(TreeItem2Content)(({ theme }) => ({
+  padding: theme.spacing(0.5, 1),
+}));
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+interface CustomTreeItemProps
+  extends Omit<UseTreeItem2Parameters, 'rootRef'>,
+    Omit<React.HTMLAttributes<HTMLLIElement>, 'onFocus'> {}
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, react/display-name
+const CustomTreeItem = forwardRef((
+  props: CustomTreeItemProps,
+  ref: React.Ref<HTMLLIElement>,
+) => {
+  const { id, itemId, label, disabled, children, ...other } = props;
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const {
+    getRootProps,
+    getContentProps,
+    getIconContainerProps,
+    getCheckboxProps,
+    getLabelProps,
+    getGroupTransitionProps,
+    status,
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  } = useTreeItem2({ id, itemId, children, label, disabled, rootRef: ref });
+
+  return (
+    <TreeItem2Provider itemId={itemId}>
+      <TreeItem2Root {...getRootProps(other)}>
+        <CustomTreeItemContent {...getContentProps()}>
+          <TreeItem2IconContainer {...getIconContainerProps()}>
+            <TreeItem2Icon status={status} />
+          </TreeItem2IconContainer>
+          <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
+            <Avatar
+              sx={(theme) => ({
+                background: theme.palette.primary.main,
+                width: 24,
+                height: 24,
+                fontSize: '0.8rem',
+              })}
+            >
+              {(label as string)[0]}
+            </Avatar>
+            <TreeItem2Checkbox {...getCheckboxProps()} />
+            <TreeItem2Label {...getLabelProps()} />
+          </Box>
+        </CustomTreeItemContent>
+        {children && <TreeItem2GroupTransition {...getGroupTransitionProps()} />}
+      </TreeItem2Root>
+    </TreeItem2Provider>
+  )
+})
 
 export default WatchedDirectories
