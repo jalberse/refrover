@@ -6,7 +6,7 @@ import { open } from "@tauri-apps/api/dialog"
 import React, { forwardRef } from "react"
 import { useEffect, useRef, useState } from "react"
 import { addWatchedDirectory, deleteWatchedDirectory, getWatchedDirectories } from "../api"
-import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
+import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Menu, MenuItem } from '@mui/material';
 
 import { readDir, BaseDirectory } from '@tauri-apps/api/fs';
 
@@ -88,6 +88,8 @@ const WatchedDirectories: React.FC = () => {
   const prevDirectoryTreesRef = useRef<DirectoryTreeItem[]>([]);
 
   const [selectedDirectories, setSelectedDirectories] = useState<string[]>([]);
+
+  const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number } | null>(null);
 
   // On mount, get the initial set of watched directories from the database
   // Populate directoryTrees with the initial set of watched directories
@@ -207,8 +209,21 @@ const WatchedDirectories: React.FC = () => {
   }
 
   const onContextMenuHandler = (event: React.MouseEvent<HTMLDivElement>, itemId: string) => {
+    event.preventDefault();
     console.log(`Right-clicked on ${itemId}`);
+    setContextMenu(
+      contextMenu === null
+        ? {
+            mouseX: event.clientX - 2,
+            mouseY: event.clientY - 4,
+          }
+        : null,
+    );
   }
+
+  const handleContextMenuClose = () => {
+    setContextMenu(null);
+  };
 
   return (
     <div>
@@ -234,6 +249,25 @@ const WatchedDirectories: React.FC = () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         slotProps={{ item: { onContextMenuHandler } as any }}
       />
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleContextMenuClose}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+      >
+        <MenuItem
+          onClick={() => {
+            console.log('Test menu item clicked');
+            handleContextMenuClose();
+          }}
+        >
+          Test
+        </MenuItem>
+      </Menu>
       {
         // Just print the selected directories for now
         selectedDirectories.map((directory) => (
