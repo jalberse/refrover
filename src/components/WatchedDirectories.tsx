@@ -193,16 +193,21 @@ const WatchedDirectories: React.FC = () => {
   //      so that we can contextually update a mui context Menu based on the node.
   //      The need for a custom item component was to allow us to have an equivalent to onItemClick
   //      that is onItemContextMenu or something like that, to handle right-clicks and to be aware of the item.
+  // https://github.com/mui/mui-x/issues/13351
+  // Something like this?
 
   // TODO In the right click context menu, we want to have an option to open the directory in the file explorer.
   // For opening the file explorer, we probably want to use the shell:
   //   https://tauri.app/v1/api/js/shell/
 
-
   const onSelectedItemsChange = (event: React.SyntheticEvent, itemIds: string[]) => {
     // TODO I think we may want to use a zustand store instead of this local state here, but I'm testing this out for now.
     setSelectedDirectories(itemIds);
     console.log(selectedDirectories);
+  }
+
+  const onContextMenuHandler = (event: React.MouseEvent<HTMLDivElement>, itemId: string) => {
+    console.log(`Right-clicked on ${itemId}`);
   }
 
   return (
@@ -225,6 +230,9 @@ const WatchedDirectories: React.FC = () => {
         multiSelect
         onSelectedItemsChange={onSelectedItemsChange}
         slots={{ item: CustomTreeItem }}
+        // Note that "as any" is unforunately required/recommended here by MUI, unless they've made a fix.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        slotProps={{ item: { onContextMenuHandler } as any }}
       />
       {
         // Just print the selected directories for now
@@ -272,14 +280,16 @@ const CustomTreeItemContent = styled(TreeItem2Content)(({ theme }) => ({
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface CustomTreeItemProps
   extends Omit<UseTreeItem2Parameters, 'rootRef'>,
-    Omit<React.HTMLAttributes<HTMLLIElement>, 'onFocus'> {}
+    Omit<React.HTMLAttributes<HTMLLIElement>, 'onFocus'> {
+      onContextMenuHandler?: (event: React.MouseEvent<HTMLDivElement>, itemId: string) => void;
+    }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, react/display-name
 const CustomTreeItem = forwardRef((
   props: CustomTreeItemProps,
   ref: React.Ref<HTMLLIElement>,
 ) => {
-  const { id, itemId, label, disabled, children, ...other } = props;
+  const { id, itemId, label, disabled, children, onContextMenuHandler, ...other } = props;
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const {
@@ -300,7 +310,10 @@ const CustomTreeItem = forwardRef((
           <TreeItem2IconContainer {...getIconContainerProps()}>
             <TreeItem2Icon status={status} />
           </TreeItem2IconContainer>
-          <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
+          <Box
+            sx={{ flexGrow: 1, display: 'flex', gap: 1 }}
+            onContextMenu={(event: React.MouseEvent<HTMLDivElement>) => onContextMenuHandler?.(event, itemId)}
+          >
             <TreeItem2Checkbox {...getCheckboxProps()} />
             <TreeItem2Label {...getLabelProps()} />
           </Box>
