@@ -89,7 +89,7 @@ const WatchedDirectories: React.FC = () => {
 
   const [selectedDirectories, setSelectedDirectories] = useState<string[]>([]);
 
-  const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number, itemId: string } | null>(null);
 
   // On mount, get the initial set of watched directories from the database
   // Populate directoryTrees with the initial set of watched directories
@@ -155,12 +155,14 @@ const WatchedDirectories: React.FC = () => {
     }
   }
 
-  // const removeDirectory = (path: string) => {
-  //   const newDirectories = directoryTrees.filter(
-  //     (directory) => directory.id !== path,
-  //   )
-  //   setDirectoryTrees(newDirectories)
-  // }
+  const removeDirectory = (itemId: string) => {
+    const newDirectories = directoryTrees.filter(
+      (directory) => directory.id !== itemId,
+    )
+    // Remove the directory from the list of selected directories if it was selected
+    setSelectedDirectories(selectedDirectories.filter((directory) => directory !== itemId));
+    setDirectoryTrees(newDirectories)
+  }
 
   useEffect(() => {
     const prevDirectories = prevDirectoryTreesRef.current
@@ -216,6 +218,7 @@ const WatchedDirectories: React.FC = () => {
         ? {
             mouseX: event.clientX - 2,
             mouseY: event.clientY - 4,
+            itemId: itemId,
           }
         : null,
     );
@@ -223,6 +226,10 @@ const WatchedDirectories: React.FC = () => {
 
   const handleContextMenuClose = () => {
     setContextMenu(null);
+  };
+
+  const isRootEntry = (itemId: string) => {
+    return directoryTrees.some((directory) => directory.id === itemId);
   };
 
   return (
@@ -259,14 +266,16 @@ const WatchedDirectories: React.FC = () => {
             : undefined
         }
       >
-        <MenuItem
-          onClick={() => {
-            console.log('Test menu item clicked');
-            handleContextMenuClose();
-          }}
-        >
-          Test
-        </MenuItem>
+        {contextMenu && isRootEntry(contextMenu.itemId) && (
+          <MenuItem
+            onClick={() => {
+              removeDirectory(contextMenu.itemId);
+              handleContextMenuClose();
+            }}
+          >
+            Delete
+          </MenuItem>
+        )}
       </Menu>
       {
         // Just print the selected directories for now
