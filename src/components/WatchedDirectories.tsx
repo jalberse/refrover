@@ -25,6 +25,7 @@ import {
 import { TreeItem2Icon } from '@mui/x-tree-view/TreeItem2Icon';
 import { TreeItem2Provider } from '@mui/x-tree-view/TreeItem2Provider';
 import { useTreeItem2 } from "@mui/x-tree-view/useTreeItem2"
+import useRoverStore from "@/hooks/store"
 
 export type Directory = {
   id: number
@@ -32,7 +33,6 @@ export type Directory = {
 }
 
 type DirectoryTreeItem = {
-  // TODO Perhaps generate IDs instead; we do string comparisons, but I'm not about to optimize for that yet.
   // The full path of the directory. Can be used as a unique ID.
   id: string;
   // The label to display in the hierarchy
@@ -90,6 +90,8 @@ const WatchedDirectories: React.FC = () => {
   const [selectedDirectories, setSelectedDirectories] = useState<string[]>([]);
 
   const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number, itemId: string } | null>(null);
+
+  const setPathPrefixes = useRoverStore((state) => state.setPathPrefixes)
 
   // On mount, get the initial set of watched directories from the database
   // Populate directoryTrees with the initial set of watched directories
@@ -192,22 +194,15 @@ const WatchedDirectories: React.FC = () => {
        })
   }, [directoryTrees])
 
-  // TODO Yay, we have custom tree items now!
-  //      That means that we should be able to pass an onContextMenu handler to them,
-  //      so that we can contextually update a mui context Menu based on the node.
-  //      The need for a custom item component was to allow us to have an equivalent to onItemClick
-  //      that is onItemContextMenu or something like that, to handle right-clicks and to be aware of the item.
-  // https://github.com/mui/mui-x/issues/13351
-  // Something like this?
-
   // TODO In the right click context menu, we want to have an option to open the directory in the file explorer.
   // For opening the file explorer, we probably want to use the shell:
   //   https://tauri.app/v1/api/js/shell/
 
   const onSelectedItemsChange = (event: React.SyntheticEvent, itemIds: string[]) => {
-    // TODO I think we may want to use a zustand store instead of this local state here, but I'm testing this out for now.
+    // TODO - We should be able to delete the selectedDirectories setting here,
+    //       and that whole local state. The zustand store will be sufficient.
     setSelectedDirectories(itemIds);
-    console.log(selectedDirectories);
+    setPathPrefixes(itemIds);
   }
 
   const onContextMenuHandler = (event: React.MouseEvent<HTMLDivElement>, itemId: string) => {

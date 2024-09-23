@@ -14,7 +14,7 @@ use uuid::Uuid;
 use diesel::sql_types::Integer;
 
 use crate::error::Error;
-use crate::models::{ImageFeatureVitL14336Px, NewFile, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::models::{File, ImageFeatureVitL14336Px, NewFile, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
 use crate::uuid::UUID;
 
 pub fn add_tag_edge(start_vertex_id: UUID, end_vertex_id: UUID, source: UUID, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
@@ -777,13 +777,34 @@ pub fn delete_files_tags(file_ids: &[UUID], connection: &mut SqliteConnection) -
    Ok(())
 }
 
+pub fn get_files_with_prefix(prefix: &[String], connection: &mut SqliteConnection) -> anyhow::Result<Vec<File>>
+{
+   // Generate a raw SQL statement that gets the ID of all files with a path that starts with any of the given prefixes.
+   // diesel has LIKE, but only has ILIKE (for multiple "OR" conditions) in the postgres module.
+   // (and indeed, I think you just need to construct this kind of query in SQLite anyways)
+   let mut query = "SELECT id, filepath, watched_directory_id FROM files WHERE ".to_string();
+   for (i, p) in prefix.iter().enumerate() {
+      query.push_str(&format!("filepath LIKE \'{}%\'", p));
+      if i < prefix.len() - 1 {
+         query.push_str(" OR ");
+      }
+   }
+
+   println!("{}", query);
+   
+   let files: Vec<File> = diesel::sql_query(query)
+         .load(connection)?;
+
+   Ok(files)
+}
+
 #[cfg(test)]
 mod tests
 {
    use diesel::sqlite::Sqlite;
    use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
    
-   use crate::{models::NewFile, schema::{watched_directories, files}};
+   use crate::{models::{NewFile, NewWatchedDirectory}, schema::{files, watched_directories}};
    use super::*;
 
    // TODO As we are shipping this executable, we will want to actually embed migrations for the whole app,
@@ -817,6 +838,78 @@ mod tests
       Ok(connection)
    }
 
-   // TODO Test various queries.
+   #[test]
+   fn get_files_with_prefix_test()
+   {
+      let mut connection = setup().unwrap();
 
+      let watched_dir_id: UUID = Uuid::new_v4().into();
+      let watched_dir = NewWatchedDirectory {
+         id: watched_dir_id,
+         filepath: "/path/to/watched/dir"
+      };
+      diesel::insert_into(watched_directories::table)
+         .values(watched_dir)
+         .execute(&mut connection).unwrap();
+
+      let file1 = NewFile {
+         id: Uuid::new_v4().into(),
+         filepath: "/path/to/watched/dir/file1.jpg".to_string(),
+         watched_directory_id: Some(watched_dir_id)
+      };
+      let file2 = NewFile {
+         id: Uuid::new_v4().into(),
+         filepath: "/path/to/watched/dir/file2.jpg".to_string(),
+         watched_directory_id: Some(watched_dir_id)
+      };
+      diesel::insert_into(files::table)
+         .values(&file1)
+         .execute(&mut connection).unwrap();
+      diesel::insert_into(files::table)
+         .values(&file2)
+         .execute(&mut connection).unwrap();
+      // Create another watched dir
+      let watched_dir_id2: UUID = Uuid::new_v4().into();
+      let watched_dir2 = NewWatchedDirectory {
+         id: watched_dir_id2,
+         filepath: "/path/to/watched/dir2"
+      };
+      diesel::insert_into(watched_directories::table)
+         .values(watched_dir2)
+         .execute(&mut connection).unwrap();
+      let file3 = NewFile {
+         id: Uuid::new_v4().into(),
+         filepath: "/path/to/watched/dir2/file3.jpg".to_string(),
+         watched_directory_id: Some(watched_dir_id2)
+      };
+      diesel::insert_into(files::table)
+         .values(&file3)
+         .execute(&mut connection).unwrap();
+      let file4 = NewFile {
+         id: Uuid::new_v4().into(),
+         filepath: "/path/to/watched/dir2/file4.jpg".to_string(),
+         watched_directory_id: Some(watched_dir_id2)
+      };
+      diesel::insert_into(files::table)
+         .values(&file4)
+         .execute(&mut connection).unwrap();
+
+      // Note the trailing slash: /path/to/watched/dir is a prefix of /path/to/watched/dir2/, but we want only the former directory!
+      let files = get_files_with_prefix(&["/path/to/watched/dir/".to_string()], &mut connection).unwrap();
+
+      assert_eq!(files.len(), 2);
+      assert!(files.iter().any(|f| f.filepath == "/path/to/watched/dir/file1.jpg"));
+      assert!(files.iter().any(|f| f.filepath == "/path/to/watched/dir/file2.jpg"));
+      // Assert we didn't get any files from the other directory
+      assert!(!files.iter().any(|f| f.filepath == "/path/to/watched/dir2/file3.jpg"));
+      assert!(!files.iter().any(|f| f.filepath == "/path/to/watched/dir2/file4.jpg"));
+
+      // Now query for '/path/to/watched/' and expect all files
+      let files = get_files_with_prefix(&["/path/to/watched/".to_string()], &mut connection).unwrap();
+      assert_eq!(files.len(), 4);
+      assert!(files.iter().any(|f| f.filepath == "/path/to/watched/dir/file1.jpg"));
+      assert!(files.iter().any(|f| f.filepath == "/path/to/watched/dir/file2.jpg"));
+      assert!(files.iter().any(|f| f.filepath == "/path/to/watched/dir2/file3.jpg"));
+      assert!(files.iter().any(|f| f.filepath == "/path/to/watched/dir2/file4.jpg"));
+   }
 }

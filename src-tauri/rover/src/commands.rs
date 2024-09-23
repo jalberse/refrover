@@ -22,6 +22,7 @@ use rayon::prelude::*; // For par_iter
 /// while the thumbnails are still loading/generating.
 #[tauri::command]
 pub async fn search_images<'a>(
+        path_prefixes: Vec<String>,
         query_string: &str,
         number_neighbors: usize,
         ef_arg: usize,
@@ -29,26 +30,85 @@ pub async fn search_images<'a>(
         search_state: tauri::State<'_, SearchState<'a>>,
         clip_state: tauri::State<'_, ClipState>,
         tokenizer_state: tauri::State<'_, ClipTokenizerState>,
+        pool_state: tauri::State<'_, ConnectionPoolState>,
     ) -> TAResult<Vec<UUID>>
 {
-    if query_string.is_empty() {
-        return Ok(vec![]);
-    }
+    // Ensure that each entry of path_prefixes has a trailing backslash,
+    // since they should be directories.
+    let path_prefixes: Vec<String> = path_prefixes.into_iter().map(|x| {
+        if x.ends_with(std::path::MAIN_SEPARATOR) {
+            x
+        } else {
+            x + std::path::MAIN_SEPARATOR.to_string().as_str()
+        }
+    }).collect();
 
+    match (path_prefixes.is_empty(), query_string.is_empty()) {
+        (true, true) => {
+            // No search criteria provided; return an empty list.
+            info!("No search criteria provided; returning an empty list.");
+            Ok(Vec::new())
+        },
+        (false, false) => {
+            info!("Searching for \"{:?}\" with path prefixes {:?}", query_string, path_prefixes);
+            // We have both a natural language query and a filter for specific folders.
+            // We want to do an HNSW search, and filter the resulting UUIDs to only those in the specified folders.
+            let uuids = hnsw_search(query_string, number_neighbors, ef_arg, distance_threshold, search_state, clip_state, tokenizer_state)?;
+            let mut connection = pool_state.get_connection().into_ta_result()?;
+            let file_ids_matching_prefix = queries::get_files_with_prefix(&path_prefixes, &mut connection)?;
+            let file_ids_matching_prefix: Vec<UUID> = file_ids_matching_prefix.into_iter().map(|x| x.id).collect();
+            // Filter the UUIDs to only those in the specified folders.
+            // First, construct a set from the file_ids_matching_prefix, for O(1) lookup.
+            let file_ids_matching_prefix_set: std::collections::HashSet<UUID> = file_ids_matching_prefix.iter().cloned().collect();
+            let out: Vec<UUID> = uuids.into_iter().filter(|x| file_ids_matching_prefix_set.contains(x)).collect();
+            info!("Found {:?} results", out.len());
+            Ok(out)
+        },
+        (true, false) => {
+            info!("Searching for \"{:?}\" with no path prefix filter", query_string);
+            // We have a natural language query but no filter for specific folders.
+            // We want to do an HNSW search across all folders.
+            let uuids = hnsw_search(query_string, number_neighbors, ef_arg, distance_threshold, search_state, clip_state, tokenizer_state)?;
+            info!("Found {:?} results", uuids.len());
+            Ok(uuids)
+        },
+        (false, true) => {
+            info!("Searching for no query with path prefixes {:?}", path_prefixes);
+            // We have a set of acceptable prefixes but no natural language query.
+            // Simply return all UUIDs with any of the specified prefixes.
+            let mut connection = pool_state.get_connection().into_ta_result()?;
+            let file_ids_matching_prefix = queries::get_files_with_prefix(&path_prefixes, &mut connection)?;
+            let file_ids_matching_prefix: Vec<UUID> = file_ids_matching_prefix.into_iter().map(|x| x.id).collect();
+            info!("Found {:?} files matching prefix", file_ids_matching_prefix.len());
+            Ok(file_ids_matching_prefix)
+        }
+    }
+}
+
+fn hnsw_search<'a>(
+    query_string: &str,
+    number_neighbors: usize,
+    ef_arg: usize,
+    distance_threshold: f32,
+    search_state: tauri::State<'_, SearchState<'a>>,
+    clip_state: tauri::State<'_, ClipState>,
+    tokenizer_state: tauri::State<'_, ClipTokenizerState>,
+) -> anyhow::Result<Vec<UUID>>
+{
     let mut hnsw_search = search_state.0.lock().unwrap();
     let hnsw = &mut hnsw_search.hnsw;
-
+    
     let tokenizer = &tokenizer_state.0.lock().unwrap().tokenizer;
     let query = preprocessing::tokenize(query_string, tokenizer);
-
+        
     let clip = &mut clip_state.0.lock().unwrap().clip;
-
+        
     let query_vector = clip.encode_text(query).into_ta_result()?;
-
+        
     let query_vector_slice = query_vector.as_slice()
         .ok_or(anyhow::anyhow!("Error converting query vector to slice for query {:?}", query_string))
         .into_ta_result()?;
-
+    
     info!("Searching for {:?}", query_string);
     let now = std::time::Instant::now();
     // Ensure ef_arg >= num_neighbors.
@@ -57,9 +117,8 @@ pub async fn search_images<'a>(
     let elapsed = now.elapsed();
     info!("Search took {:?} for {:?} neighbors with ef_ arg {:?} and distance threshold {:?}", elapsed, number_neighbors, ef_arg, distance_threshold);
     info!("Found {:?} results", search_results.len());
-
+    
     let search_results_uuids: Vec<UUID> = search_results.iter().map(|x| x.0).collect();
-
     Ok(search_results_uuids)
 }
 
@@ -191,11 +250,7 @@ pub async fn add_watched_directory(
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
-    // TODO Search doesn't seem to be invoked while this is running. Why? Shouldn't they launch as separate async tasks/threads?
-
-    // TODO - consider - we don't want to allow a new watched dir that is a subdirectory of an existing watched dir, OR a parent of an existing watched dir.
-    //      That (as well as checking if it already exists and perhaps exists on the filesystem) should be in some validate_new_watched_dir command or something,
-    //      which would be non-async.
+    // TODO Since watcheddirs now include subdirs, we need to recursively add files to the database - right now, it's just doing the top level.
 
     // TODO Consider if we want to make watched directories recursive.
     //      I strongly suspect we do - we'd want to drop folders into a top level scheme and have access.
@@ -206,19 +261,6 @@ pub async fn add_watched_directory(
     //      Just iterate over the existing watched dirs and check starts_with(), I think?
     // And we'd need to handle that recursive stuff in the remove_watched_directory command as well.
 
-    // TODO If we do make them recursive, consider making watched directories and base directories separate concepts in the DB.
-    //      A based directory may be watched recursively, but it's not the root that's passed to the watcher.
-
-    // TODO Consider that base directories save ~zero space. Windows allows 260 bytes for file paths, e.g.
-    //      Even with 10k images, that's just 2.6 MB. Removing redundant data (shared prefixes) is just *not* worth the hassle.
-    //      Before, it was vaguely worth it because I conceptualized base directories as watched directories, partially,
-    //      so saying "grab everything in this directory" or "delete all of these" made a bit more sense.
-    //      But with recursively watched directories (which I think we want), then the "relative path" includes the path up to some prefix,
-    //      including potentially a lot of intermediary folders.
-    //      I think things just get conceptually simpler if files stored the absolute filepath.
-
-    // TODO Okay, I'm cutting out the base_directories table. change this to add the watched directory.
-    // TODO We'll make the switch keeping the watched dirs flat, and then move to make them recursive.
     // TODO And once we do that, we'll want the frontend to check that the directory isn't already watched by an ancestor directory.
     //      ... and we'll want to do that here, returning an error if so.
     //      I want the frontend to check so that we can check that before adding it to the displayed list of watched dirs...

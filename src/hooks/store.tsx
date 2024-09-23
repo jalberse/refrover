@@ -8,6 +8,9 @@ type RoverStore = {
   fsEventStatus: string
   setFsEventStatus: (status: string) => void
   clearFsEventStatus: () => void
+
+  pathPrefixes: string[]
+  setPathPrefixes: (prefixes: string[]) => void
 }
 
 const useRoverStore = create<RoverStore>((set) => ({
@@ -24,6 +27,10 @@ const useRoverStore = create<RoverStore>((set) => ({
   },
   clearFsEventStatus: () => {
     set(() => ({ fsEventStatus: "" }))
+  },
+  pathPrefixes: [],
+  setPathPrefixes: (prefixes) => {
+    set(() => ({ pathPrefixes: prefixes }))
   },
 }))
 

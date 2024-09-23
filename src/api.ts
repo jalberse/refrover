@@ -25,8 +25,8 @@ export async function fetchMetadata(fileUuid: string) {
   }
 }
 
-// Performs a KNN search using the HNSW index to find the nearest neighbors for the given query string.
-export async function hnswSearch(
+export async function searchImages(
+  pathPrefixes: string[],
   queryString: string,
   numberNeighbors: number,
   efArg: number,
@@ -34,6 +34,7 @@ export async function hnswSearch(
 ) {
   try {
     const fileUuids = await invoke<FileUuid[]>("search_images", {
+      pathPrefixes,
       queryString,
       numberNeighbors,
       efArg,

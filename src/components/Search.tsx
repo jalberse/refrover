@@ -22,6 +22,10 @@ export default function Search({ placeholder }: { placeholder: string }) {
     replace(`${pathname}?${params.toString()}`)
   }, 300)
 
+  // TODO I think we also want to display badges for the prefixed paths (and later tags), which we can get from the store.
+  //      Those badges can have a "X" button to remove them (which would also need to effect their hierarchies on the sidebar)
+  //   Can do this later, though, functionally it's just another way to accomplish what we can do in the hierarchy.
+
   return (
     <div className="relative flex flex-1 flex-shrink-0">
       <label htmlFor="search" className="sr-only">

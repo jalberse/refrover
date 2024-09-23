@@ -27,7 +27,7 @@ pub struct NewFileTag {
     pub tag_id: UUID,
 }
 
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, QueryableByName, Selectable)]
 #[diesel(table_name = crate::schema::files)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[derive(Serialize)]

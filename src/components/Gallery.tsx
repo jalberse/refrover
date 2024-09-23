@@ -2,19 +2,21 @@
 
 import useRoverStore from "@/hooks/store"
 import type FileUuid from "@/interfaces/FileUuid"
-import type Thumbnail from "@/interfaces/Thumbnail"
 import { useEffect, useState } from "react"
 import { Masonry } from "react-plock"
-import { fetchThumbnails, hnswSearch } from "../api"
+import { fetchThumbnails, searchImages } from "../api"
 import GalleryCard from "./GalleryCard"
+import Thumbnail from "@/interfaces/thumbnail"
 
-interface GalleryProps {
+type GalleryProps = {
   searchText: string
 }
 
 export const Gallery: React.FC<GalleryProps> = ({
   searchText,
 }: GalleryProps) => {
+  // TODO These constants should probably live... somewhere else.
+
   // Reasonable defaults for the number of neighbors and efArg for hnsw search
   // We can adjust these as needed for the user experience, including
   // cranking up the number of neighbors. Lag seems to be resulting from thumbnail loading
@@ -32,10 +34,13 @@ export const Gallery: React.FC<GalleryProps> = ({
 
   const [searchResults, setSearchResults] = useState<FileUuid[] | null>(null)
 
+  const pathPrefixes = useRoverStore((state) => state.pathPrefixes)
+  
   useEffect(() => {
     const fetchSearchResults = async () => {
       try {
-        const result = await hnswSearch(
+        const result = await searchImages(
+          pathPrefixes,
           searchText,
           numberNeighbors,
           efArg,
@@ -50,7 +55,7 @@ export const Gallery: React.FC<GalleryProps> = ({
     fetchSearchResults().catch((error: unknown) => {
       console.error(error)
     })
-  }, [searchText])
+  }, [searchText, pathPrefixes])
 
   if (searchText !== "" && !searchResults) {
     // Indicate that the empty results are due to actually not having any results, rather than a loading state.
