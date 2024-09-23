@@ -96,10 +96,16 @@ fn main() -> anyhow::Result<()> {
             // We'll probably share a lot of code with that in the FS watcher.
             // In fact, we might want to do it in an initial scan callback...? Maybe not.
 
-            // TODO We need a table that stores the watched directories.
-            //      We need to populate the front-end with them,
-            //      and create watchers for them.
-            //      Right now it's hardcoded to D:\refrover_photos that gets added on click.
+            // TODO We need to get the initial set of watched directories and
+            //      create watchers for them and add them to the map.
+            //      We currently fetch the watched dirs for display on mount, but we don't
+            //      actually start watching them (only the ones that are added after the app starts).
+
+            // TODO We should also be doing this with them:
+            // let recursive = true;
+            // tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, recursive).into_ta_result()?;
+            // So that we can actually access those directories (this would likely be remembered from .persisted-scope,
+            // but we should ensure it here.)
 
             // TODO And probably initialize a default watche directory if it doesn't exist?
             let watcher_state = FsWatcherState(Mutex::new(FsInnerWatcherState { watchers: std::collections::HashMap::new() }));
@@ -123,6 +129,7 @@ fn main() -> anyhow::Result<()> {
             info!("HNSW rebuild took {:?}", elapsed);
             info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
             info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
+
 
             Ok(())
         })

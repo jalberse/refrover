@@ -198,6 +198,8 @@ const WatchedDirectories: React.FC = () => {
   // For opening the file explorer, we probably want to use the shell:
   //   https://tauri.app/v1/api/js/shell/
 
+  // TODO ... but before that, some "copy path" option is probably easy to start with.
+
   const onSelectedItemsChange = (event: React.SyntheticEvent, itemIds: string[]) => {
     // TODO - We should be able to delete the selectedDirectories setting here,
     //       and that whole local state. The zustand store will be sufficient.
@@ -207,7 +209,6 @@ const WatchedDirectories: React.FC = () => {
 
   const onContextMenuHandler = (event: React.MouseEvent<HTMLDivElement>, itemId: string) => {
     event.preventDefault();
-    console.log(`Right-clicked on ${itemId}`);
     setContextMenu(
       contextMenu === null
         ? {

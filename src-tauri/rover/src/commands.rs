@@ -1,6 +1,7 @@
 use log::info;
 use tauri::Manager;
 use uuid::Uuid;
+use walkdir::{WalkDir, DirEntry};
 
 use crate::clip::Clip;
 use crate::models::NewFile;
@@ -250,22 +251,10 @@ pub async fn add_watched_directory(
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
-    // TODO Since watcheddirs now include subdirs, we need to recursively add files to the database - right now, it's just doing the top level.
-
-    // TODO Consider if we want to make watched directories recursive.
-    //      I strongly suspect we do - we'd want to drop folders into a top level scheme and have access.
-    // If we do so, then when the user wants to add a new watched dir to their list, we should stop
-    //      them if it is already watched via an ancestor directory and disallow it.
-    //      That makes the user story pretty simple I think? Just add all the top level dirs they want to watched.
-    //      They can drag and drop files and folders into it.
-    //      Just iterate over the existing watched dirs and check starts_with(), I think?
-    // And we'd need to handle that recursive stuff in the remove_watched_directory command as well.
-
-    // TODO And once we do that, we'll want the frontend to check that the directory isn't already watched by an ancestor directory.
-    //      ... and we'll want to do that here, returning an error if so.
-    //      I want the frontend to check so that we can check that before adding it to the displayed list of watched dirs...
-    //      Maybe we need a separate, non-async command for that which just checks if a directory is already watched (contained in another watched dir).
-    //      Non-async commands are fine as long as we're just quickly checking the DB or something.
+    // TODO And send a message showing we're doing analysis... 
+    //      I'm also thinking that the status should account for potentially-multiple background threads doing work.
+    //      Something like a counter to say "number of threads doing work" and a finish event decrements, a start event increments.
+    //      When non-zero, we show a spinner and when 0, it's caught up.
 
     let directory_path = std::path::Path::new(&directory);
     
@@ -281,9 +270,8 @@ pub async fn add_watched_directory(
         return Err(anyhow::anyhow!("Attempted to add Directory {:?}, which is already in the database.", directory_path).into());
     }
 
-    // I expect this directory should already be allowed via a call to open(): https://tauri.app/v1/api/js/dialog/#open
-    // But we'll ensure it's allowed here, too.
-    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, true).into_ta_result()?;
+    let recursive = true;
+    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, recursive).into_ta_result()?;
 
     // TODO Should we wrap this in a transaction so we can revert it if we e.g. fail to create a watcher?
     // https://docs.diesel.rs/2.0.x/diesel/connection/trait.Connection.html#method.transaction
@@ -313,30 +301,29 @@ pub async fn add_watched_directory(
         watcher_state.watchers.insert(directory.clone(), watcher);
     }
 
-    // TODO We're switching to recursively watched directories, so we'll need to add sub-directory files, too.
-    
-    // Add its files in the directory to the DB.
-    let files = std::fs::read_dir(directory_path).into_ta_result()?;
-    // Filter to only files. We will ignore any path that is not a file (directories, symlinks, etc.)
-    let files = files.filter_map(|x| x.ok()).filter(|x| x.file_type().into_ta_result().ok().map(|y| y.is_file()).unwrap_or(false));
-    
-    let mut file_ids: Vec<UUID> = Vec::with_capacity(files.size_hint().0);
-    let new_file_rows: Vec<NewFile> = files.map(|x| -> anyhow::Result<NewFile> {
-        let file_uuid = Uuid::new_v4().into();
-        let binding = x.path().clone();
-        let file_path_str = binding.to_str().ok_or(anyhow::anyhow!("Unable to convert path to string"))?;
-        
-        file_ids.push(file_uuid);
-        
-        Ok(NewFile
+    // Recursively get all entries in the directory, skipping errors
+    let mut file_ids: Vec<UUID> = Vec::new();
+    let mut new_files: Vec<NewFile> = Vec::new();
+    for entry in WalkDir::new(directory_path)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|x| x.ok())
+    {
+        let file_path = entry.path();
+        if file_path.is_file() {
+            let file_uuid = Uuid::new_v4().into();
+            let file_path_str = file_path.to_str().ok_or(anyhow::anyhow!("Unable to convert path to string"))?;
+            file_ids.push(file_uuid);
+            let new_file = NewFile
             {
                 id: file_uuid.into(),
                 filepath: file_path_str.to_string(),
                 watched_directory_id: Some(watched_dir_uuid.into()),
-            })
-        }).collect::<Result<Vec<NewFile>, anyhow::Error>>()?;
-        
-    queries::insert_files_rows(&new_file_rows, &mut connection).into_ta_result()?;
+            };
+            new_files.push(new_file);
+        }
+    }
+    queries::insert_files_rows(&new_files, &mut connection).into_ta_result()?;
 
     // Encode images and store results in the DB.
     // Note this is relatively long-running; this command is async, so it will not block the main thread.

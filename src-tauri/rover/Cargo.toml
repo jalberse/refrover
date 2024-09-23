@@ -46,6 +46,7 @@ kamadak-exif = "0.5.5"
 notify-debouncer-full = "0.3.1"
 paths-as-strings = "0.1.1"
 approx = "0.5.1"
+walkdir = "2.5.0"
 
 [dependencies.uuid]
 version = "1.10.0"
