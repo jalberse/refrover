@@ -1,7 +1,7 @@
 mod models;
 mod schema;
 pub mod db;
-mod queries;
+pub mod queries;
 pub mod clip;
 mod preprocessing;
 pub mod ann;

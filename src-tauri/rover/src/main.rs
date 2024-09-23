@@ -3,12 +3,16 @@
     windows_subsystem = "windows"
 )]
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use app::ann;
 use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
+use app::notify_handlers::FsEventHandler;
+use app::notify_handlers::FS_WATCHER_DEBOUNCER_DURATION;
+use app::queries;
 use app::state::ClipState;
 use app::state::ClipTokenizerState;
 use app::state::ConnectionPoolState;
@@ -29,7 +33,7 @@ use tauri_plugin_log::LogTarget;
 // Note that Trace level causes massive slowdowns due to I/O in HNSW.
 const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 #[cfg(not(debug_assertions))]
-const LOG_LEVEL: LevelFilter = LevelFilter::Warn;
+const LOG_LEVEL: LevelFilter = LevelFilter::Info;
 
 
 fn main() -> anyhow::Result<()> {
@@ -78,7 +82,6 @@ fn main() -> anyhow::Result<()> {
                 },
             };
 
-            
             let pool_state = app.state::<ConnectionPoolState>();
 
             let init_db_result = db::init(&pool_state, populate_dummy_data);
@@ -90,26 +93,33 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // TODO For files that were added while the program *wasn't* running, we need to
-            // scan them and add them to the HNSW index (and any other relevant tables).
-            // Thumbnails we can ignore for now, generating them on the fly is OK.
-            // We'll probably share a lot of code with that in the FS watcher.
-            // In fact, we might want to do it in an initial scan callback...? Maybe not.
-
-            // TODO We need to get the initial set of watched directories and
-            //      create watchers for them and add them to the map.
-            //      We currently fetch the watched dirs for display on mount, but we don't
-            //      actually start watching them (only the ones that are added after the app starts).
-
-            // TODO We should also be doing this with them:
-            // let recursive = true;
-            // tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, recursive).into_ta_result()?;
-            // So that we can actually access those directories (this would likely be remembered from .persisted-scope,
-            // but we should ensure it here.)
-
-            // TODO And probably initialize a default watche directory if it doesn't exist?
             let watcher_state = FsWatcherState(Mutex::new(FsInnerWatcherState { watchers: std::collections::HashMap::new() }));
             app.manage(watcher_state);
+
+            let mut connection = pool_state.get_connection()?;
+            let watched_directories = queries::get_watched_directories(&mut connection)?;
+
+            // Start watching watched directoreis.
+            for (watched_uuid, watched_path) in watched_directories {
+                // These should generally already by allowed via the persisted scope, but ensure it here.
+                let recursive = true;
+                tauri::scope::FsScope::allow_directory(&app.fs_scope(), &watched_path, recursive)?;
+
+                let fs_event_handler = FsEventHandler {
+                    app_handle: app.app_handle().clone(),
+                    watch_directory_id: watched_uuid.clone(),
+                    watch_directory_path: PathBuf::from(watched_path.clone()),
+                };
+                let watcher = notify_debouncer_full::new_debouncer(
+                    FS_WATCHER_DEBOUNCER_DURATION,
+                    None,
+                    fs_event_handler)?;
+                
+                let watcher_state = app.state::<FsWatcherState>();
+                watcher_state.0.lock().unwrap().watchers.insert(watched_path, watcher);
+            }
+
+            // TODO And probably initialize a default watched directory if it doesn't exist?
 
             // We rebuild every time the app launches;
             // it is fast enough, and it handles the fact that
@@ -122,6 +132,8 @@ fn main() -> anyhow::Result<()> {
             // Say every (configurable) 100 files removed, we rebuild (check after batches of removed files, though).
             // TODO Speaking of, maybe we should have a table that stores removed files and their UUIDs,
             //      in case we ever need to recover information.
+            //      Or rather, a "deleted" flag in most tables, so we can mark it as deleted and recover if needed.
+            //      Would need to modify queries to check for not-deleted, though.
             info!("Populating HNSW index...");
             let now = std::time::Instant::now();
             ann::populate_hnsw(app)?;
@@ -130,6 +142,12 @@ fn main() -> anyhow::Result<()> {
             info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
             info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
 
+            
+            // TODO Files that were added to these directories while the program wasn't running
+            //      will be on the FS, but not in our database.
+            //      We need to start a background process to (1) add them to the database, and
+            //      (2) encode them and add them to the HNSW index.
+            //   That work should obviously be launched *after* we initialize the HNSW index...
 
             Ok(())
         })
