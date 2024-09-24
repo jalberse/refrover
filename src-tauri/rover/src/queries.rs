@@ -14,7 +14,7 @@ use uuid::Uuid;
 use diesel::sql_types::Integer;
 
 use crate::error::Error;
-use crate::models::{File, ImageFeatureVitL14336Px, NewFile, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail};
+use crate::models::{File, ImageFeatureVitL14336Px, NewFile, NewTagEdge, NewThumbnail, RowsAffected, Thumbnail, WatchedDirectory};
 use crate::uuid::UUID;
 
 pub fn add_tag_edge(start_vertex_id: UUID, end_vertex_id: UUID, source: UUID, connection: &mut SqliteConnection) -> diesel::QueryResult<()>
@@ -631,11 +631,11 @@ pub fn insert_files_rows(files_rows: &[NewFile], connection: &mut SqliteConnecti
    Ok(())
 }
 
-pub fn get_watched_directories(connection: &mut SqliteConnection) -> anyhow::Result<Vec<(UUID, String)>>
+pub fn get_watched_directories(connection: &mut SqliteConnection) -> anyhow::Result<Vec<WatchedDirectory>>
 {
    use crate::schema::watched_directories;
 
-   let watched_directories: Vec<(UUID, String)> = watched_directories::table
+   let watched_directories: Vec<WatchedDirectory> = watched_directories::table
       .select((watched_directories::id, watched_directories::filepath))
       .load(connection)?;
 
@@ -796,6 +796,19 @@ pub fn get_files_with_prefix(prefix: &[String], connection: &mut SqliteConnectio
          .load(connection)?;
 
    Ok(files)
+}
+
+pub fn file_exists(filepath: &str, connection: &mut SqliteConnection) -> anyhow::Result<bool>
+{
+   use crate::schema::files;
+
+   let exists: bool = select(
+      exists(
+         files::table.filter(
+            files::filepath.eq(filepath))))
+      .get_result(connection)?;
+
+   Ok(exists)
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-mod models;
+pub mod models;
 mod schema;
 pub mod db;
 pub mod queries;
@@ -7,9 +7,10 @@ mod preprocessing;
 pub mod ann;
 pub mod commands;
 pub mod state;
-mod error;
+pub mod error;
 mod thumbnails;
 mod junk_drawer;
 pub mod interface;
 pub mod notify_handlers;
-mod uuid;
+pub mod uuid;
+pub mod events;

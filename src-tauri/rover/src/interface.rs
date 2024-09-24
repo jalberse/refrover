@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::uuid::UUID;
 
+
 /// The payload of a message sent from the front-end to the back-end.
 #[derive(Serialize, Deserialize, Default, PartialEq, Clone)]
 pub struct Payload 

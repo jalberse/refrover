@@ -5,7 +5,7 @@ use log::{error, info, trace};
 use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
 
-use crate::{clip::Clip, error::Error, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
+use crate::{clip::Clip, error::Error, events::Event, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
 
 
 pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
@@ -25,7 +25,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
         // https://docs.rs/file-id/0.2.1/file_id/index.html
 
         info!("Handling events...");
-        let emit_result = self.app_handle.emit_all("fs-event", Payload { message: "analyzing...".to_string() });
+        let emit_result = self.app_handle.emit_all(Event::TaskStatus.event_name(), Payload { message: "analyzing...".to_string() });
         if emit_result.is_err()
         {
             error!("Error emitting fs-event: {:?}", emit_result);

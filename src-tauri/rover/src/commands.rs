@@ -1,7 +1,7 @@
 use log::info;
 use tauri::Manager;
 use uuid::Uuid;
-use walkdir::{WalkDir, DirEntry};
+use walkdir::WalkDir;
 
 use crate::clip::Clip;
 use crate::models::NewFile;
@@ -340,7 +340,7 @@ pub fn get_watched_directories(
 {
     let mut connection = pool_state.get_connection().into_ta_result()?;
     let watched_dirs = queries::get_watched_directories(&mut connection).into_ta_result()?;
-    let watched_dirs = watched_dirs.into_iter().map(|x| x.1).collect();
+    let watched_dirs = watched_dirs.into_iter().map(|x| x.filepath).collect();
     Ok(watched_dirs)
 }
 

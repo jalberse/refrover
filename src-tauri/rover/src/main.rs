@@ -5,11 +5,14 @@
 
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::thread;
 
 use app::ann;
 use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
+use app::error::Error;
+use app::models::NewFile;
 use app::notify_handlers::FsEventHandler;
 use app::notify_handlers::FS_WATCHER_DEBOUNCER_DURATION;
 use app::queries;
@@ -23,18 +26,21 @@ use app::state::InnerSearchState;
 use app::state::FsInnerWatcherState;
 use app::state::SearchState;
 use app::state::FsWatcherState;
+use app::uuid::UUID;
 use log::error;
 use log::info;
 use log::LevelFilter;
 use tauri::Manager;
 use tauri_plugin_log::LogTarget;
+use app::models::WatchedDirectory;
+use walkdir::WalkDir;
 
 #[cfg(debug_assertions)]
-// Note that Trace level causes massive slowdowns due to I/O in HNSW.
+// Note that Trace level causes massive slowdowns due to I/O in HNSW
+// (that crate could probably be excluded from logging, but it's not a big deal for now).
 const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 #[cfg(not(debug_assertions))]
-const LOG_LEVEL: LevelFilter = LevelFilter::Info;
-
+const LOG_LEVEL: LevelFilter = LevelFilter::Warn;
 
 fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
@@ -100,8 +106,10 @@ fn main() -> anyhow::Result<()> {
             let watched_directories = queries::get_watched_directories(&mut connection)?;
 
             // Start watching watched directoreis.
-            for (watched_uuid, watched_path) in watched_directories {
+            for watched_directory_row in &watched_directories {
                 // These should generally already by allowed via the persisted scope, but ensure it here.
+                let watched_path = &watched_directory_row.filepath;
+                let watched_uuid = watched_directory_row.id;
                 let recursive = true;
                 tauri::scope::FsScope::allow_directory(&app.fs_scope(), &watched_path, recursive)?;
 
@@ -116,7 +124,7 @@ fn main() -> anyhow::Result<()> {
                     fs_event_handler)?;
                 
                 let watcher_state = app.state::<FsWatcherState>();
-                watcher_state.0.lock().unwrap().watchers.insert(watched_path, watcher);
+                watcher_state.0.lock().unwrap().watchers.insert(watched_path.clone(), watcher);
             }
 
             // TODO And probably initialize a default watched directory if it doesn't exist?
@@ -131,7 +139,7 @@ fn main() -> anyhow::Result<()> {
             // We only need to rebuild due to the removal of files, since we can add elements whenever we want.
             // Say every (configurable) 100 files removed, we rebuild (check after batches of removed files, though).
             // TODO Speaking of, maybe we should have a table that stores removed files and their UUIDs,
-            //      in case we ever need to recover information.
+            //      in case we ever need to recover information
             //      Or rather, a "deleted" flag in most tables, so we can mark it as deleted and recover if needed.
             //      Would need to modify queries to check for not-deleted, though.
             info!("Populating HNSW index...");
@@ -142,12 +150,11 @@ fn main() -> anyhow::Result<()> {
             info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
             info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
 
-            
-            // TODO Files that were added to these directories while the program wasn't running
-            //      will be on the FS, but not in our database.
-            //      We need to start a background process to (1) add them to the database, and
-            //      (2) encode them and add them to the HNSW index.
-            //   That work should obviously be launched *after* we initialize the HNSW index...
+            let app_handle = app.app_handle().clone();
+            // Handle potentially long-running work that we don't want to block the application opening.
+            thread::spawn(move || -> anyhow::Result<()> {
+                initial_scan(&watched_directories, app_handle)
+            });
 
             Ok(())
         })
@@ -160,6 +167,70 @@ fn main() -> anyhow::Result<()> {
             app::commands::get_watched_directories,
             ])
         .run(tauri::generate_context!())?;
+
+    Ok(())
+}
+
+/// Perform the initial scan of the filesystem, updating the database and HNSW index as needed.
+/// This is something we want to do on startup, but which takes too long to accomplish in setup()
+/// on the main thread. So we launch this function in a separate thread, allowing the frontend
+/// to launch and the user to interact with the app while the initial scan is performed.
+fn initial_scan(
+    watched_directories: &[WatchedDirectory],
+    app_handle: tauri::AppHandle,
+) -> anyhow::Result<()> {
+    // TODO This thread will also be sending messages indicating progress to the front-end.
+    //      Is that going to be an issue since it's launched *before* run() is called?
+    //      https://tauri.app/v1/guides/features/events/
+    //      Their docs do it but I'm not sure that's the same thing - the listeners in the frontend aren't ready yet in that case, I think.
+    //      Hmm, well, cross that bridge when I get to it.
+    //      And if we're sending multiple as we process, I suppose even if we drop the first one it's likely fine? Idk.
+    //        We'd just need the frontend to get *a* "analyzing" message, even if it's by the time it's made some progress.
+    //        Yeah, I think that's fine.
+    
+    // TODO There may be a faster way to check which in the set of files are not in the database;
+    //      maybe constructing a temporary table and using a NOT IN clause?
+    //      Doing it this way for now because it is more simple; our database is local, queries are fast.
+    
+    // Scan the files in the watched directories, and add any new files to the database.
+    let mut connection = app_handle.state::<ConnectionPoolState>().get_connection()?;
+    let mut file_ids: Vec<UUID> = Vec::new();
+    let mut new_files: Vec<NewFile> = Vec::new();
+    for watched_directory in watched_directories
+    {
+        for entry in WalkDir::new(&watched_directory.filepath)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let file_path = entry.path();
+            if file_path.is_file()
+            {
+                if !queries::file_exists(file_path.to_str().ok_or(Error::PathBufToString)?, &mut connection)?
+                {
+                    let new_file = NewFile {
+                        id: uuid::Uuid::new_v4().into(),
+                        filepath: file_path.to_string_lossy().to_string(),
+                        watched_directory_id: Some(watched_directory.id),
+                    };
+                    file_ids.push(new_file.id.clone());
+                    new_files.push(new_file);
+                }
+            }
+        }
+    }
+
+    if !new_files.is_empty()
+    {
+        info!("Inserting {} new files into the database...", new_files.len());
+        queries::insert_files_rows(&new_files, &mut connection)?;
+        let clip_state = app_handle.state::<ClipState>();
+
+        info!("Adding to HNSW index...");
+        let search_state = app_handle.state::<SearchState>();
+        Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)?;
+        info!("Added to HNSW index.");
+    }
 
     Ok(())
 }
