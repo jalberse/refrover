@@ -4,6 +4,7 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::clip::Clip;
+use crate::events::{Event, TaskEndPayload, TaskStatusPayload};
 use crate::models::NewFile;
 use crate::notify_handlers::{FsEventHandler, FS_WATCHER_DEBOUNCER_DURATION};
 use crate::state::{ClipState, ClipTokenizerState, ConnectionPoolState, FsWatcherState, SearchState};
@@ -251,10 +252,12 @@ pub async fn add_watched_directory(
     app_handle: tauri::AppHandle,
 ) -> TAResult<()>
 {
-    // TODO And send a message showing we're doing analysis... 
-    //      I'm also thinking that the status should account for potentially-multiple background threads doing work.
-    //      Something like a counter to say "number of threads doing work" and a finish event decrements, a start event increments.
-    //      When non-zero, we show a spinner and when 0, it's caught up.
+    let task_uuid = Uuid::new_v4().to_string();
+    app_handle.emit_all(Event::TaskStatus.event_name(), TaskStatusPayload
+    {
+        task_uuid: task_uuid.clone(),
+        status: format!("Adding watched directory: {}...", directory),
+    }).into_ta_result()?;
 
     let directory_path = std::path::Path::new(&directory);
     
@@ -329,6 +332,11 @@ pub async fn add_watched_directory(
     // Note this is relatively long-running; this command is async, so it will not block the main thread.
     // But it's a good idea to keep this as the last step in the command so other tables are updated quickly.
     Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)?;
+
+    app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload
+    {
+        task_uuid: task_uuid.clone(),
+    }).into_ta_result()?;
 
     Ok(())
 }

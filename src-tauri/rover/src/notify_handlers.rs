@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use log::{error, info, trace};
 use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
+use uuid::Uuid;
 
-use crate::{clip::Clip, error::Error, events::Event, interface::Payload, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
-
+use crate::{clip::Clip, error::Error, events::{Event, TaskStatusPayload, TaskEndPayload}, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
 
 pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
 
@@ -24,18 +24,24 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
         // TODO Consider file system ids:
         // https://docs.rs/file-id/0.2.1/file_id/index.html
 
-        info!("Handling events...");
-        let emit_result = self.app_handle.emit_all(Event::TaskStatus.event_name(), Payload { message: "analyzing...".to_string() });
-        if emit_result.is_err()
-        {
-            error!("Error emitting fs-event: {:?}", emit_result);
-        }
-
         // TODO On release ~200 images are taking *five seconds* to process?
         // Slower than I would think. I suppose we could investigate later.
-
+        
+        let task_uuid = Uuid::new_v4().to_string();
         match result {
             Ok(events) => {
+                let emit_result = self.app_handle.emit_all(
+                    Event::TaskStatus.event_name(),
+                    TaskStatusPayload {
+                        task_uuid: task_uuid.clone(),
+                        status: format!("Processing {} events", events.len()),
+                    },
+                );
+                if emit_result.is_err()
+                {
+                    error!("Error emitting fs-event: {:?}", emit_result);
+                }
+
                 // Events are be stored in the following order:
                 // 1. `remove` or `move out` event
                 // 2. `rename` event.
@@ -73,8 +79,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
             Err(e) => error!("Error handling event: {:?}", e),
         }
 
-        info!("Done handling events.");
-        let emit_result = self.app_handle.emit_all("fs-event", Payload { message: "rover-analyzer".to_string() });
+        let emit_result = self.app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload { task_uuid });
         if emit_result.is_err()
         {
             error!("Error emitting fs-event: {:?}", emit_result);

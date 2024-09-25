@@ -5,21 +5,28 @@ type RoverStore = {
   setDetailsViewFileUuid: (uuid: string) => void
   clearDetailsViewFileUuid: () => void
 
-  // TODO I think we want to instead have a set of IDs corresponding to currently-active-background-tasks.
-  //      We can have two events (perhaps analyzer-start and analyzer-end), and each will send a UUID (generated at the start of the task,
-  //      just before sending analyzer-start).
-  //      The set maintains these UUIDs, removing them on analyzer-end and adding them on analyzer-start.
-  //      When the set is non-empty, we know there's work being done and can display "rover-analyzer (spinner)".
-  //      When the set is empty, we know there's no background work being done and can display "rover-analyzer (checkmark)".
-  //      ... Or further, we can maintain a map of UUIDs to statuses that e.g. give the current progress of the task (number of images processed out of total, e.g.).
-  //      A user can then click on the rover-analyzer button in the taskbar to view the list of tasks, and the status per.
-  //   But maybe just start with the set of UUIDs and the spinner/checkmark status.
+  // TODO Delete the fsEventStatus stuff... Task bar will now use taskStatuses.
   fsEventStatus: string
   setFsEventStatus: (status: string) => void
   clearFsEventStatus: () => void
 
   pathPrefixes: string[]
   setPathPrefixes: (prefixes: string[]) => void
+
+  // TODO I'm thinking:
+  // taskStatuses empty? "rover-analyzer (checkmark)"
+  // taskStatuses non-empty? "rover-analyzer (spinner)"
+  // Clicking the rover-analyzer will then show each of the "status" strings in a little
+  //  modal list above it. The status strings from the backend can include the
+  //  description and the numebr of images processed out of total.
+  //  For now, that can just be in the given status string - the backend can format.
+  //  In the future we might want to have a more structured status object
+  //  so we can display things differently, but don't bother for now.
+
+  // Create a map from UUIDs to statuses.
+  taskStatuses: Map<string, string>
+  setTaskStatus: (uuid: string, status: string) => void
+  removeTaskStatus: (uuid: string) => void
 }
 
 const useRoverStore = create<RoverStore>((set) => ({
@@ -30,6 +37,7 @@ const useRoverStore = create<RoverStore>((set) => ({
   clearDetailsViewFileUuid: () => {
     set(() => ({ detailsViewFileUuid: "" }))
   },
+
   fsEventStatus: "rover-analyzer",
   setFsEventStatus: (status) => {
     set(() => ({ fsEventStatus: status }))
@@ -37,9 +45,26 @@ const useRoverStore = create<RoverStore>((set) => ({
   clearFsEventStatus: () => {
     set(() => ({ fsEventStatus: "" }))
   },
+
   pathPrefixes: [],
   setPathPrefixes: (prefixes) => {
     set(() => ({ pathPrefixes: prefixes }))
+  },
+
+  taskStatuses: new Map(),
+  setTaskStatus: (uuid, status) => {
+    set((state) => {
+      const newTaskStatuses = new Map(state.taskStatuses)
+      newTaskStatuses.set(uuid, status)
+      return { taskStatuses: newTaskStatuses }
+    })
+  },
+  removeTaskStatus: (uuid) => {
+    set((state) => {
+      const newTaskStatuses = new Map(state.taskStatuses)
+      newTaskStatuses.delete(uuid)
+      return { taskStatuses: newTaskStatuses }
+    })
   },
 }))
 

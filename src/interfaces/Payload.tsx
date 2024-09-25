@@ -1,5 +1,8 @@
-type Payload = {
-  message: string
+export type TaskStatusPayload = {
+  uuid: string
+  status: string
 }
 
-export default Payload
+export type TaskEndPayload = {
+  uuid: string
+}
