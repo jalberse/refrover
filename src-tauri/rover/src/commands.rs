@@ -18,7 +18,8 @@ use anyhow_tauri::{IntoTAResult, TAResult};
 
 use rayon::prelude::*;
 
-// TODO Other commands should probably return a TaskError as well. WE can remove the TAResult dependency, I suppose.
+// TODO Other commands need to return a TaskError as well, and we need to handle them on the frontend.
+//      At least, it's necessary for anything that emits a TaskStatus event.
 
 /// Search for image UUIDs which match a query string according to CLIP encodings.
 /// Returns a list of UUIDs of images which match the query.
@@ -256,16 +257,23 @@ pub async fn add_watched_directory(
 ) -> Result<(), TaskError>
 {
     let task_uuid = Uuid::new_v4().to_string();
+    let directory_path = std::path::Path::new(&directory);
+    let directory_name = directory_path.file_name().ok_or(anyhow::anyhow!("Unable to get directory name from path")).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Anyhow(e)
+    })?.to_str().ok_or(anyhow::anyhow!("Unable to convert directory name to string")).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Anyhow(e)
+    })?;
     app_handle.emit_all(Event::TaskStatus.event_name(), TaskStatusPayload
     {
         task_uuid: task_uuid.clone(),
-        status: format!("Adding watched directory: {}...", directory),
+        status: format!("Adding watched directory: {}...", directory_name),
     }).map_err(|e| TaskError {
         task_uuid: task_uuid.clone(),
         error: Error::Tauri(e)
     })?;
 
-    let directory_path = std::path::Path::new(&directory);
     
     if !directory_path.is_dir() {
         return Err(TaskError {

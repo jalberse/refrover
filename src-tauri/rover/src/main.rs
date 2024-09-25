@@ -154,6 +154,9 @@ fn main() -> anyhow::Result<()> {
             // Handle potentially long-running work that we don't want to block the application opening.
             thread::spawn(move || -> anyhow::Result<()> {
                 initial_scan(&watched_directories, app_handle)
+                // TODO initial_scan should return a Result<TaskError>, and on error
+                // we should log it and send a TaskEnd event with the ID.
+                // If we fail to send the TaskEnd event, we can just log that too, I suppose.
             });
 
             Ok(())
@@ -188,6 +191,12 @@ fn initial_scan(
     //        We'd just need the frontend to get *a* "analyzing" message, even if it's by the time it's made some progress.
     //        Yeah, I think that's fine.
     
+    // TODO We'll send a TaskStatus from this, but any errors should be handled by emitting a TaskEnd event
+    //      with the proper ID so it can be removed as a task, having failed.
+    //      If we fail to send the TaskEnd we can panic lol.
+    //      Within commands, the caller is expected to handle the TaskError, but here we need to
+    //      send the event ourselves to ensure any TaskStatus is cleared on error.
+
     // TODO There may be a faster way to check which in the set of files are not in the database;
     //      maybe constructing a temporary table and using a NOT IN clause?
     //      Doing it this way for now because it is more simple; our database is local, queries are fast.
