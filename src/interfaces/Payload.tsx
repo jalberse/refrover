@@ -1,8 +1,8 @@
 export type TaskStatusPayload = {
-  uuid: string
+  task_uuid: string
   status: string
 }
 
 export type TaskEndPayload = {
-  uuid: string
+  task_uuid: string
 }

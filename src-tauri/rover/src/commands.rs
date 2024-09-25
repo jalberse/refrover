@@ -4,6 +4,7 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::clip::Clip;
+use crate::error::{Error, TaskError};
 use crate::events::{Event, TaskEndPayload, TaskStatusPayload};
 use crate::models::NewFile;
 use crate::notify_handlers::{FsEventHandler, FS_WATCHER_DEBOUNCER_DURATION};
@@ -15,7 +16,9 @@ use imghdr;
 use crate::interface::{FileMetadata, ImageSize, Thumbnail};
 use anyhow_tauri::{IntoTAResult, TAResult};
 
-use rayon::prelude::*; // For par_iter
+use rayon::prelude::*;
+
+// TODO Other commands should probably return a TaskError as well. WE can remove the TAResult dependency, I suppose.
 
 /// Search for image UUIDs which match a query string according to CLIP encodings.
 /// Returns a list of UUIDs of images which match the query.
@@ -250,38 +253,62 @@ pub async fn add_watched_directory(
     pool_state: tauri::State<'_, ConnectionPoolState>,
     search_state: tauri::State<'_, SearchState<'_>>,
     app_handle: tauri::AppHandle,
-) -> TAResult<()>
+) -> Result<(), TaskError>
 {
     let task_uuid = Uuid::new_v4().to_string();
     app_handle.emit_all(Event::TaskStatus.event_name(), TaskStatusPayload
     {
         task_uuid: task_uuid.clone(),
         status: format!("Adding watched directory: {}...", directory),
-    }).into_ta_result()?;
+    }).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Tauri(e)
+    })?;
 
     let directory_path = std::path::Path::new(&directory);
     
     if !directory_path.is_dir() {
-        return Err(anyhow::anyhow!("Directory {:?} does not exist, is not a directory, or there are permissions/access errors.", directory_path).into());
+        return Err(TaskError {
+            task_uuid,
+            error: Error::NotADirectory
+        });
     }
 
-    let mut connection = pool_state.get_connection().into_ta_result()?;
+    let mut connection = pool_state.get_connection().map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Anyhow(e)
+    })?;
     if queries::watched_dir_exists(
-            directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string"))?,
+            directory_path.to_str().ok_or(anyhow::anyhow!("Unable to convert directory path to string")).map_err(|e| TaskError {
+                task_uuid: task_uuid.clone(),
+                error: Error::Anyhow(e)
+            })?,
             &mut connection
-        ).into_ta_result()? {
-        return Err(anyhow::anyhow!("Attempted to add Directory {:?}, which is already in the database.", directory_path).into());
+        ).map_err(|e| TaskError {
+            task_uuid: task_uuid.clone(),
+            error: Error::Anyhow(e)
+        })? {
+        return Err(TaskError {
+            task_uuid,
+            error: Error::DirectoryAlreadyExistsInDb
+        });
     }
 
     let recursive = true;
-    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, recursive).into_ta_result()?;
+    tauri::scope::FsScope::allow_directory(&app_handle.fs_scope(), directory_path, recursive).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Tauri(e)
+    })?;
 
     // TODO Should we wrap this in a transaction so we can revert it if we e.g. fail to create a watcher?
     // https://docs.diesel.rs/2.0.x/diesel/connection/trait.Connection.html#method.transaction
     let watched_dir_uuid = queries::insert_watched_directory(
         &directory,
         &mut connection
-    ).into_ta_result()?;
+    ).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Anyhow(e)
+    })?;
 
     let fs_event_handler = FsEventHandler {
         app_handle: app_handle.clone(),
@@ -291,7 +318,10 @@ pub async fn add_watched_directory(
     let watcher = notify_debouncer_full::new_debouncer(
         FS_WATCHER_DEBOUNCER_DURATION,
         None,
-        fs_event_handler).into_ta_result()?;
+        fs_event_handler).map_err(|e| TaskError {
+            task_uuid: task_uuid.clone(),
+            error: Error::Notify(e)
+        })?;
 
     // Add to the map of watchers in the app state.
     // Note that an alternative architecture would be to have *one* watcher and just have it watch
@@ -315,7 +345,10 @@ pub async fn add_watched_directory(
         let file_path = entry.path();
         if file_path.is_file() {
             let file_uuid = Uuid::new_v4().into();
-            let file_path_str = file_path.to_str().ok_or(anyhow::anyhow!("Unable to convert path to string"))?;
+            let file_path_str = file_path.to_str().ok_or(anyhow::anyhow!("Unable to convert path to string")).map_err(|e| TaskError {
+                task_uuid: task_uuid.clone(),
+                error: Error::Anyhow(e)
+            })?;
             file_ids.push(file_uuid);
             let new_file = NewFile
             {
@@ -326,17 +359,26 @@ pub async fn add_watched_directory(
             new_files.push(new_file);
         }
     }
-    queries::insert_files_rows(&new_files, &mut connection).into_ta_result()?;
+    queries::insert_files_rows(&new_files, &mut connection).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Anyhow(e)
+    })?;
 
     // Encode images and store results in the DB.
     // Note this is relatively long-running; this command is async, so it will not block the main thread.
     // But it's a good idea to keep this as the last step in the command so other tables are updated quickly.
-    Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)?;
+    Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Anyhow(e)
+    })?;
 
     app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload
     {
         task_uuid: task_uuid.clone(),
-    }).into_ta_result()?;
+    }).map_err(|e| TaskError {
+        task_uuid,
+        error: Error::Tauri(e)
+    })?;
 
     Ok(())
 }

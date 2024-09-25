@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/tauri"
 
 import { convertFileSrc } from "@tauri-apps/api/tauri"
+import useRoverStore from "./hooks/store"
 import type FileMetadata from "./interfaces/FileMetadata"
 import type FileUuid from "./interfaces/FileUuid"
+import type { TaskError } from "./interfaces/TaskError"
 import type Thumbnail from "./interfaces/thumbnail"
 
 // TODO Ensure we're using proper interfaces for e.g. File UUIDs.
@@ -74,13 +76,23 @@ export async function fetchThumbnails(fileIds: FileUuid[]) {
   }
 }
 
+function isTaskError(error: unknown): error is TaskError {
+  return (error as TaskError).error !== undefined
+}
+
 export async function addWatchedDirectory(directory: string) {
   try {
     await invoke("add_watched_directory", {
       directory,
     })
       .catch((error: unknown) => {
-        console.error("Error adding watched directory:", error)
+        if (isTaskError(error)) {
+          console.error("Error adding watched directory:", error.error)
+          const clearTaskStatus = useRoverStore.getState().removeTaskStatus
+          clearTaskStatus(error.task_uuid)
+        } else {
+          console.error("Unknown error adding watched directory:", error)
+        }
       })
       .then(() => {
         console.log("Successfully added watched directory")
