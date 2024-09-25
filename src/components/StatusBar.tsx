@@ -39,8 +39,16 @@ const StatusBar: React.FC = () => {
 
   return (
     <div className="fixed bottom-0 w-full bg-blue-600 text-white text-left px-1 z-50">
-      <span>rust-analyzer</span>
-      {taskStatuses.size === 0 ? <CheckIcon /> : <CircularProgress size="1rem"/>}
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <span>rust-analyzer </span>
+        <div style={{ padding: "0 4px" }}>
+          {taskStatuses.size === 0 ? (
+            <CheckIcon />
+          ) : (
+            <CircularProgress size="1rem" />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
