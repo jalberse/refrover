@@ -66,8 +66,8 @@ const StatusBar: React.FC = () => {
   // https://github.com/tauri-apps/tauri/discussions/6952
   // And then we'd use that error in api.tsx to clear the provided taskStatus from the store.
 
-  // TODO This would be on the backend, but the messages are too long. I suspect just the name (not absolute path) of the new dir is sufficient.
-  //      (we could also have a structured response so the frontend could decide, but I'm lazy)
+  // Uhm, I think that I did that for add_watched_directory, but we need to do that for the rest as well,
+  //   as long as they're sending a TaskStatus event at some point
 
   return (
     <div className="fixed bottom-0 w-full bg-blue-600 text-white text-left px-1 z-50">

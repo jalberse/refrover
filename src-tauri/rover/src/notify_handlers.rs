@@ -30,6 +30,8 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
         let task_uuid = Uuid::new_v4().to_string();
         match result {
             Ok(events) => {
+                // TODO Alright, so if we get an error in here, we should emit a TaskEnd event with the ID so we can clear the task from the UI.
+                //      Same as in main.rs initial scan.
                 let emit_result = self.app_handle.emit_all(
                     Event::TaskStatus.event_name(),
                     TaskStatusPayload {
@@ -76,13 +78,13 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                     error!("Error handling new files: {:?}", e);
                 }
             },
-            Err(e) => error!("Error handling event: {:?}", e),
+            Err(e) => error!("Error handling event in notify-debouncer: {:?}", e),
         }
 
         let emit_result = self.app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload { task_uuid });
         if emit_result.is_err()
         {
-            error!("Error emitting fs-event: {:?}", emit_result);
+            error!("Error emitting event: {:?}", emit_result);
         }
     }
 }

@@ -12,6 +12,10 @@ use app::ann::HnswSearch;
 use app::clip::Clip;
 use app::db;
 use app::error::Error;
+use app::error::TaskError;
+use app::events::Event;
+use app::events::TaskEndPayload;
+use app::events::TaskStatusPayload;
 use app::models::NewFile;
 use app::notify_handlers::FsEventHandler;
 use app::notify_handlers::FS_WATCHER_DEBOUNCER_DURATION;
@@ -33,6 +37,7 @@ use log::LevelFilter;
 use tauri::Manager;
 use tauri_plugin_log::LogTarget;
 use app::models::WatchedDirectory;
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 #[cfg(debug_assertions)]
@@ -150,13 +155,22 @@ fn main() -> anyhow::Result<()> {
             info!("HNSW EF_CONSTRUCTION: {:?}", ann::DEFAULT_EF_CONSTRUCTION);
             info!("HNSW_MAX_ELEMS: {:?}", ann::DEFAULT_MAX_ELEMS);
 
-            let app_handle = app.app_handle().clone();
             // Handle potentially long-running work that we don't want to block the application opening.
+            let app_handle = app.app_handle().clone();
             thread::spawn(move || -> anyhow::Result<()> {
-                initial_scan(&watched_directories, app_handle)
-                // TODO initial_scan should return a Result<TaskError>, and on error
-                // we should log it and send a TaskEnd event with the ID.
-                // If we fail to send the TaskEnd event, we can just log that too, I suppose.
+                let result = initial_scan(&watched_directories, app_handle.clone());
+                if let Err(e) = result {
+                    error!("Error during initial scan: {:?}", e);
+                    // Also emit a TaskEnd event to clear the task status
+                    let emit_result = app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload {
+                        task_uuid: e.task_uuid,
+                    });
+                    if emit_result.is_err()
+                    {
+                        error!("Failed to emit TaskEnd event: {:?}", emit_result.err());
+                    }
+                }
+                Ok(())
             });
 
             Ok(())
@@ -181,28 +195,30 @@ fn main() -> anyhow::Result<()> {
 fn initial_scan(
     watched_directories: &[WatchedDirectory],
     app_handle: tauri::AppHandle,
-) -> anyhow::Result<()> {
-    // TODO This thread will also be sending messages indicating progress to the front-end.
-    //      Is that going to be an issue since it's launched *before* run() is called?
-    //      https://tauri.app/v1/guides/features/events/
-    //      Their docs do it but I'm not sure that's the same thing - the listeners in the frontend aren't ready yet in that case, I think.
-    //      Hmm, well, cross that bridge when I get to it.
-    //      And if we're sending multiple as we process, I suppose even if we drop the first one it's likely fine? Idk.
-    //        We'd just need the frontend to get *a* "analyzing" message, even if it's by the time it's made some progress.
-    //        Yeah, I think that's fine.
-    
-    // TODO We'll send a TaskStatus from this, but any errors should be handled by emitting a TaskEnd event
-    //      with the proper ID so it can be removed as a task, having failed.
-    //      If we fail to send the TaskEnd we can panic lol.
-    //      Within commands, the caller is expected to handle the TaskError, but here we need to
-    //      send the event ourselves to ensure any TaskStatus is cleared on error.
+) -> Result<(), TaskError> {
+    // TODO This TaskStatus may fire before the frontend is ready to receive it.
+    //      I think if we sprinkle more in (which we should, to show actual progress)
+    //      then the frontend will eventually receive one. I'll need to test and see how it is.
+    //      An alternative approach might be to not do the initial_scan() in setup(), but have a command
+    //      that we expect the frontend to call (and so we know the frontend is ready when it starts).
+    //      But need to have that only run once. Maybe on mount of the application? Not sure the best
+    //      way to do that React-side.
 
-    // TODO There may be a faster way to check which in the set of files are not in the database;
-    //      maybe constructing a temporary table and using a NOT IN clause?
-    //      Doing it this way for now because it is more simple; our database is local, queries are fast.
-    
+    let task_uuid: String = Uuid::new_v4().into();
+
+    let emit_result = app_handle.emit_all(Event::TaskStatus.event_name(),
+        TaskStatusPayload {
+            task_uuid: task_uuid.clone(),
+            status: "Initialization: Scanning watched directories...".to_owned(),
+        }
+    );
+    if emit_result.is_err() {
+        error!("Failed to emit TaskStatus event: {:?}", emit_result.err());
+    }
+
     // Scan the files in the watched directories, and add any new files to the database.
-    let mut connection = app_handle.state::<ConnectionPoolState>().get_connection()?;
+    let mut connection = app_handle.state::<ConnectionPoolState>().get_connection()
+        .map_err(|e| TaskError { task_uuid: task_uuid.clone(), error: Error::Anyhow(e) })?;
     let mut file_ids: Vec<UUID> = Vec::new();
     let mut new_files: Vec<NewFile> = Vec::new();
     for watched_directory in watched_directories
@@ -215,7 +231,9 @@ fn initial_scan(
             let file_path = entry.path();
             if file_path.is_file()
             {
-                if !queries::file_exists(file_path.to_str().ok_or(Error::PathBufToString)?, &mut connection)?
+                if !queries::file_exists(
+                    file_path.to_str().ok_or(TaskError { task_uuid: task_uuid.clone(), error: Error::PathBufToString })?,
+                    &mut connection).map_err(|e| TaskError { task_uuid: task_uuid.clone(), error: Error::Anyhow(e) })?
                 {
                     let new_file = NewFile {
                         id: uuid::Uuid::new_v4().into(),
@@ -232,13 +250,23 @@ fn initial_scan(
     if !new_files.is_empty()
     {
         info!("Inserting {} new files into the database...", new_files.len());
-        queries::insert_files_rows(&new_files, &mut connection)?;
+        queries::insert_files_rows(&new_files, &mut connection).map_err(|e| TaskError { task_uuid: task_uuid.clone(), error: Error::Anyhow(e) })?;
         let clip_state = app_handle.state::<ClipState>();
 
         info!("Adding to HNSW index...");
         let search_state = app_handle.state::<SearchState>();
-        Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)?;
+        Clip::encode_files_and_add_to_search(&file_ids, &mut connection, clip_state, search_state)
+            .map_err(|e| TaskError { task_uuid: task_uuid.clone(), error: Error::Anyhow(e) })?;
         info!("Added to HNSW index.");
+    }
+
+    let emit_result = app_handle.emit_all(Event::TaskEnd.event_name(),
+        TaskEndPayload {
+            task_uuid: task_uuid.clone(),
+        }
+    );
+    if emit_result.is_err() {
+        error!("Failed to emit TaskEnd event: {:?}", emit_result.err());
     }
 
     Ok(())
