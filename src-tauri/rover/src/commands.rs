@@ -1,4 +1,5 @@
 use log::info;
+use notify_debouncer_full::notify::{RecursiveMode, Watcher};
 use tauri::Manager;
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -323,13 +324,17 @@ pub async fn add_watched_directory(
         watch_directory_id: watched_dir_uuid,
         watch_directory_path: directory_path.to_path_buf(),
     };
-    let watcher = notify_debouncer_full::new_debouncer(
+    let mut debouncer = notify_debouncer_full::new_debouncer(
         FS_WATCHER_DEBOUNCER_DURATION,
         None,
         fs_event_handler).map_err(|e| TaskError {
             task_uuid: task_uuid.clone(),
             error: Error::Notify(e)
         })?;
+    debouncer.watcher().watch(directory_path, RecursiveMode::Recursive).map_err(|e| TaskError {
+        task_uuid: task_uuid.clone(),
+        error: Error::Notify(e)
+    })?;
 
     // Add to the map of watchers in the app state.
     // Note that an alternative architecture would be to have *one* watcher and just have it watch
@@ -339,7 +344,12 @@ pub async fn add_watched_directory(
     // This is a recommended pattern from `notify` https://docs.rs/notify/latest/notify/#with-different-configurations
     {
         let mut watcher_state = watcher_state.0.lock().unwrap();
-        watcher_state.watchers.insert(directory.clone(), watcher);
+        let inserted = watcher_state.watchers.insert(directory.clone(), debouncer);
+
+        info!("Inserted watcher for directory {:?}: {:?}", directory, inserted.is_none());
+
+        // Print the list of watchers
+        info!("Watchers: {:?}", watcher_state.watchers.keys());
     }
 
     // Recursively get all entries in the directory, skipping errors

@@ -77,7 +77,6 @@ const StatusBar: React.FC = () => {
         color="primary"
         onClick={handleClick}
       >
-        <span>rust-analyzer</span>
         <span style={{ padding: "0 4px" }}>
           {taskStatuses.size === 0 ? (
             <CheckIcon />
@@ -85,6 +84,7 @@ const StatusBar: React.FC = () => {
             <CircularProgress size="1rem" />
           )}
         </span>
+        <span>rust-analyzer</span>
       </Button>
       <Popover
         id={id}

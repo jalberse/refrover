@@ -1,12 +1,12 @@
 
 use std::path::PathBuf;
 
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use notify_debouncer_full::{notify::{event::{CreateKind, ModifyKind, RemoveKind, RenameMode}, EventKind}, DebounceEventResult, DebouncedEvent};
 use tauri::Manager;
 use uuid::Uuid;
 
-use crate::{clip::Clip, error::Error, events::{Event, TaskStatusPayload, TaskEndPayload}, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
+use crate::{clip::Clip, error::{Error, TaskError}, events::{Event, TaskEndPayload, TaskStatusPayload}, queries, state::{ClipState, ConnectionPoolState, SearchState}, uuid::UUID};
 
 pub const FS_WATCHER_DEBOUNCER_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
 
@@ -20,18 +20,72 @@ pub struct FsEventHandler
 
 impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
     fn handle_event(&mut self, result: DebounceEventResult) {
-
-        // TODO Consider file system ids:
+        // TODO Consider file system ids for matching up events
         // https://docs.rs/file-id/0.2.1/file_id/index.html
 
         // TODO On release ~200 images are taking *five seconds* to process?
         // Slower than I would think. I suppose we could investigate later.
         
+        // TODO I wasn't seeing events fire ebcause while I made the debouncers
+        // and stored the path with the event handlers, I didn't actually set the
+        // debouncer's watchers to watch the path. So, no events were being emitted.
+        // I fixed in the command to add new and in main for initialization from db.
+        // Test that we are receiving events now.
+
+        debug!("Event in {:?}", self.watch_directory_path);
+        debug!("Handling event: {:?}", result);
+
         let task_uuid = Uuid::new_v4().to_string();
+        let dir_name = self.watch_directory_path.file_name();
+        match dir_name {
+            Some(dir_name) => {
+                let dir_name = dir_name.to_string_lossy();
+                let emit_result = self.app_handle.emit_all(
+                    Event::TaskStatus.event_name(),
+                    TaskStatusPayload {
+                        task_uuid: task_uuid.clone(),
+                        status: format!("Handling changes in {}", dir_name) });
+                if emit_result.is_err()
+                {
+                    error!("Error emitting event: {:?}", emit_result);
+                }
+            },
+            None => {
+                error!("Unable to get directory name from path: {:?}", self.watch_directory_path);
+                return;
+            },
+        }
+
+        // TODO - In the future we may want to emit a TaskEnd event with a "success" or "failure" status,
+        // so that we can e.g. create a pop-up on any errors. For now, we just need the event
+        // to clear the task from the UI.
+        // TODO Related: some errors internally we just log an error!() and move on to handle other events.
+        //      That still emits a TaskEnd event here when we return, but (especially when we have a success/failure status)
+        //      we probably want to propagate that error up to here?
+        //      Maybe we handle the other events but accumulate a list of errors that, if non-empty, we kick up to here with?
+        //      There's a bit of tension between this as a "Task" vs indivudal events. One event failing does not the whole task fail, maybe. 
+        // In the case of a success or failure, we need to emit a TaskEnd event.
+        let event_result = self.handle_event_inner(result, task_uuid.clone());
+        if let Err(e) = event_result {
+            error!("Error handling event: {:?}", e);
+        }
+
+        let emit_result = self.app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload { task_uuid });
+        if emit_result.is_err()
+        {
+            error!("Error emitting event: {:?}", emit_result);
+        }
+    }
+}
+
+impl FsEventHandler {
+    fn handle_event_inner(
+        &mut self,
+        result: DebounceEventResult,
+        task_uuid: String,
+    ) -> Result<(), TaskError> {
         match result {
             Ok(events) => {
-                // TODO Alright, so if we get an error in here, we should emit a TaskEnd event with the ID so we can clear the task from the UI.
-                //      Same as in main.rs initial scan.
                 let emit_result = self.app_handle.emit_all(
                     Event::TaskStatus.event_name(),
                     TaskStatusPayload {
@@ -58,7 +112,7 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                 // we can process them in batches.
                 let mut new_files: Vec<PathBuf> = Vec::new();
                 for debounced_event in events {
-                    let result = self.handle_event_inner(
+                    let result = self.handle_individual_event(
                         &debounced_event,
                         &mut last_rename_from,
                         &mut new_files);
@@ -72,25 +126,24 @@ impl notify_debouncer_full::DebounceEventHandler for FsEventHandler {
                     error!("Last RenameMode::From event without a RenameMode::To event: {:?}", last_rename_from);
                 }
 
-                let result = self.handle_new_files(&new_files);
-                if let Err(e) = result {
-                    // Log error and continue processing other events.
-                    error!("Error handling new files: {:?}", e);
-                }
+                Ok(self.handle_new_files(&new_files).map_err(|e| TaskError{
+                    task_uuid: task_uuid.clone(),
+                    error: Error::Anyhow(e),
+                })?)
             },
-            Err(e) => error!("Error handling event in notify-debouncer: {:?}", e),
-        }
-
-        let emit_result = self.app_handle.emit_all(Event::TaskEnd.event_name(), TaskEndPayload { task_uuid });
-        if emit_result.is_err()
-        {
-            error!("Error emitting event: {:?}", emit_result);
+            Err(e) => {
+                for err in e {
+                    error!("Error in debouncer: {:?}", err);
+                }
+                Err(TaskError {
+                    task_uuid,
+                    error: Error::NotifyDebouncerError,
+                })
+            }
         }
     }
-}
 
-impl FsEventHandler {
-    fn handle_event_inner(
+    fn handle_individual_event(
         &self,
         debounced_event: &DebouncedEvent,
         last_rename_from: &mut Option<DebouncedEvent>,
@@ -104,21 +157,7 @@ impl FsEventHandler {
         // Extensive logging is therefore useful for refining our event handling for various scenarios.
 
         // For now, we ignore directories (and symlinked files, etc).
-        // TODO - Consider recursively watching for files. If the watcher is recursive, then we'll catch new
-        //        files added to subdirectories (and new subdirectories, I think).
-        //        But, those files wouldn't have a basedir entry in the DB necessarily.
-        //        For now, we're just watching flat directories for the MVP.
-        //        Recursively watching makes a lot of sense (users may dump new folders in, we want to watch
-        //        the contained files).
-        //        Maybe in the API we check if newly added watched directories are already watched
-        //        (ie they have a parent recursively watching them) and we can say "we can't add that directory,
-        //        it's already being watched" as a dialog or something.
-        //        That way we get recursive watching, and the user is expected to just add top-level directories
-        //        that they want to watch.
-        //        The complication there is that we *would* need to handle recursive base directories.
-        //        The watched/basedir tables then don't capture the same concept.
-        //        TODO - Then I'm tempted to simply do away with the basedir table and store the absolute path of every file.
-        //        We store redundant data (the path to the base dir) but it could possibly simplify things...
+
         // TODO If we recursively watch and remove a directory, will the OS emit a remove for all the contained files?
         //        Or just the directory? If the latter, we'd need to handle getting all the contained files (and recursive dirs?)
         //        that are getting deleted.

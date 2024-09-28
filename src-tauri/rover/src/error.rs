@@ -19,6 +19,8 @@ pub enum Error {
     NotADirectory,
     #[error("The directory already exists in the database")]
     DirectoryAlreadyExistsInDb,
+    #[error("Error in notify-debouncer; check logs.")]
+    NotifyDebouncerError,
 }
 
 

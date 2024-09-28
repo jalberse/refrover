@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
@@ -34,6 +35,8 @@ use app::uuid::UUID;
 use log::error;
 use log::info;
 use log::LevelFilter;
+use notify_debouncer_full::notify::RecursiveMode;
+use notify_debouncer_full::notify::Watcher;
 use tauri::Manager;
 use tauri_plugin_log::LogTarget;
 use app::models::WatchedDirectory;
@@ -123,13 +126,14 @@ fn main() -> anyhow::Result<()> {
                     watch_directory_id: watched_uuid.clone(),
                     watch_directory_path: PathBuf::from(watched_path.clone()),
                 };
-                let watcher = notify_debouncer_full::new_debouncer(
+                let mut debouncer = notify_debouncer_full::new_debouncer(
                     FS_WATCHER_DEBOUNCER_DURATION,
                     None,
                     fs_event_handler)?;
+                debouncer.watcher().watch(Path::new(watched_path), RecursiveMode::Recursive)?;
                 
                 let watcher_state = app.state::<FsWatcherState>();
-                watcher_state.0.lock().unwrap().watchers.insert(watched_path.clone(), watcher);
+                watcher_state.0.lock().unwrap().watchers.insert(watched_path.clone(), debouncer);
             }
 
             // TODO And probably initialize a default watched directory if it doesn't exist?
@@ -203,6 +207,10 @@ fn initial_scan(
     //      that we expect the frontend to call (and so we know the frontend is ready when it starts).
     //      But need to have that only run once. Maybe on mount of the application? Not sure the best
     //      way to do that React-side.
+
+    // TODO Consider - if a file is in the database but NOT in the filesystem, should we remove it from the database?
+    //      Maybe? Better if we have "mark as deleted" instead with a column in the files table, so it can be recovered (possibly by the user?).
+    //      But as a baseline, we'd have like "fetch this file" "oh it doesn't exist" errors, and clog up results with non-existent files.
 
     let task_uuid: String = Uuid::new_v4().into();
 

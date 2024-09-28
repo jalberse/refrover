@@ -276,6 +276,10 @@ impl Clip
         search_state: tauri::State<'_, SearchState<'_>>
     ) -> anyhow::Result<()>
     {
+        // TODO Because this is long-running, we probably want an Option<UUID> with a task_uuid.
+        //      If that's provided, we should emit TaskStatus events with that uuid and the status;
+        //      that will involve modifying the payload to include some progress identifier (probably two ints).
+
         // Note that we pass in the clip_state rather than using &self here
         // so that we can quickly release the lock on the app's CLIP state after
         // encoding the images.
